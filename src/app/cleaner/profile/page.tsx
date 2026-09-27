@@ -8,8 +8,8 @@ export const metadata: Metadata = { title: "Cleaner profile" };
 
 export default async function CleanerProfilePage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
   const user = await requireUser("cleaner");
-  const cleanerId = cleanerIdForUser(user.id);
-  const cleaner = cleanerId ? one<Cleaner>("SELECT * FROM cleaners WHERE id = ?", cleanerId) : null;
+  const cleanerId = await cleanerIdForUser(user.id);
+  const cleaner = cleanerId ? await one<Cleaner>("SELECT * FROM cleaners WHERE id = ?", cleanerId) : null;
   const message = await searchParams;
   if (!cleaner) return <div className="page"><div className="surface empty">Cleaner profile not found.</div></div>;
   return (

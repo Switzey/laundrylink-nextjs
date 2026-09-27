@@ -10,9 +10,9 @@ export const metadata: Metadata = { title: "Manage services" };
 
 export default async function CleanerServicesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user = await requireUser("cleaner");
-  const cleanerId = cleanerIdForUser(user.id);
+  const cleanerId = await cleanerIdForUser(user.id);
   const { error } = await searchParams;
-  const services = cleanerId ? all<Service>("SELECT * FROM services WHERE cleaner_id = ? ORDER BY is_active DESC, name", cleanerId) : [];
+  const services = cleanerId ? await all<Service>("SELECT * FROM services WHERE cleaner_id = ? ORDER BY is_active DESC, name", cleanerId) : [];
   return (
     <div className="page"><div className="page-header"><div><p className="eyebrow">Service catalogue</p><h1 className="page-title">Services and pricing</h1><p className="page-copy">Keep your customer-facing service list clear, current, and bookable.</p></div></div>{error && <p className="mb-5 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error.replaceAll("+", " ")}</p>}
       <div className="grid gap-7 lg:grid-cols-[.75fr_1.25fr]"><form action={addServiceAction} className="surface panel form-grid h-fit"><h2 className="section-title">Add a service</h2><label><span className="field-label">Service name</span><input className="field" name="name" required placeholder="Wash and fold" /></label><label><span className="field-label">Description</span><textarea className="field min-h-24" name="description" /></label><div className="form-grid two"><label><span className="field-label">Price (NGN)</span><input className="field" name="price" type="number" min="1" step="0.01" required /></label><label><span className="field-label">Pricing unit</span><select className="field" name="unit"><option value="per_item">Per item</option><option value="per_kg">Per kg</option><option value="flat_rate">Flat rate</option></select></label></div><button className="btn-primary" type="submit">Add service</button></form>

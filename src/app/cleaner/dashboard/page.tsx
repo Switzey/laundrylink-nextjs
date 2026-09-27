@@ -11,14 +11,14 @@ export const metadata: Metadata = { title: "Cleaner dashboard" };
 
 export default async function CleanerDashboard() {
   const user = await requireUser("cleaner");
-  const cleanerId = cleanerIdForUser(user.id);
-  const cleaner = cleanerId ? one<Cleaner>("SELECT * FROM cleaners WHERE id = ?", cleanerId) : null;
+  const cleanerId = await cleanerIdForUser(user.id);
+  const cleaner = cleanerId ? await one<Cleaner>("SELECT * FROM cleaners WHERE id = ?", cleanerId) : null;
   if (!cleaner) return <div className="page"><div className="surface empty">Your cleaner profile is not ready yet.</div></div>;
-  const orders = all<OrderSummary>(`SELECT o.*, c.business_name, u.name AS customer_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id LEFT JOIN users u ON u.id = o.customer_id WHERE o.cleaner_id = ? ORDER BY o.created_at DESC`, cleaner.id);
+  const orders = await all<OrderSummary>(`SELECT o.*, c.business_name, u.name AS customer_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id LEFT JOIN users u ON u.id = o.customer_id WHERE o.cleaner_id = ? ORDER BY o.created_at DESC`, cleaner.id);
   const active = orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length;
   const completed = orders.filter((order) => order.status === "completed").length;
   const revenue = orders.filter((order) => order.status === "completed").reduce((sum, order) => sum + Number(order.subtotal), 0);
-  const services = one<{ count: number }>("SELECT COUNT(1) AS count FROM services WHERE cleaner_id = ? AND is_active = 1", cleaner.id)?.count ?? 0;
+  const services = (await one<{ count: number }>("SELECT COUNT(1) AS count FROM services WHERE cleaner_id = ? AND is_active = 1", cleaner.id))?.count ?? 0;
   return (
     <div className="page">
       <div className="page-header"><div><div className="flex flex-wrap items-center gap-2"><p className="eyebrow">Cleaner workspace</p><span className={`badge ${cleaner.is_approved ? "border-teal-200 bg-teal-50 text-teal-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>{cleaner.is_approved ? "Approved" : "Awaiting approval"}</span></div><h1 className="page-title">{cleaner.business_name}</h1><p className="page-copy">Manage incoming work, services, availability, and customer handoffs.</p></div><div className="flex gap-2"><Link className="btn-secondary" href="/cleaner/profile"><Settings2 size={17} />Profile</Link><Link className="btn-primary" href="/cleaner/services"><BriefcaseBusiness size={17} />Services</Link></div></div>

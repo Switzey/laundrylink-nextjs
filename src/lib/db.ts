@@ -1,79 +1,78 @@
 import "server-only";
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
-
-// Node 24 ships SQLite natively. The project intentionally avoids a PHP or ORM runtime.
-// @ts-expect-error The scaffold currently bundles Node 20 type definitions.
-import { DatabaseSync } from "node:sqlite";
+import { pathToFileURL } from "node:url";
+import { createClient, type Client, type InValue, type ResultSet, type Transaction } from "@libsql/client";
 
 const bundledDatabasePath = path.join(process.cwd(), "data", "laundrylink.sqlite");
-const databasePath =
+const localDatabasePath =
   process.env.DATABASE_PATH ??
   (process.env.VERCEL ? path.join("/tmp", "laundrylink.sqlite") : bundledDatabasePath);
 
-// Vercel functions are read-only outside /tmp. Start each cold instance from the
-// safe demo seed so reads and server actions both work in hosted previews.
-if (process.env.VERCEL && !process.env.DATABASE_PATH && !existsSync(databasePath)) {
-  copyFileSync(bundledDatabasePath, databasePath);
+if (!process.env.TURSO_DATABASE_URL && process.env.VERCEL && !existsSync(localDatabasePath)) {
+  copyFileSync(bundledDatabasePath, localDatabasePath);
 }
 
-const globalForDatabase = globalThis as unknown as {
-  laundryLinkDatabase?: InstanceType<typeof DatabaseSync>;
-};
+const databaseUrl = process.env.TURSO_DATABASE_URL ?? pathToFileURL(localDatabasePath).href;
+
+const globalForDatabase = globalThis as unknown as { laundryLinkDatabase?: Client };
 
 export const db =
-  globalForDatabase.laundryLinkDatabase ?? new DatabaseSync(databasePath);
+  globalForDatabase.laundryLinkDatabase ??
+  createClient({
+    url: databaseUrl,
+    authToken: process.env.TURSO_AUTH_TOKEN,
+  });
 
 if (process.env.NODE_ENV !== "production") {
   globalForDatabase.laundryLinkDatabase = db;
 }
 
-db.exec(`
-  PRAGMA foreign_keys = ON;
-  PRAGMA journal_mode = WAL;
-  CREATE TABLE IF NOT EXISTS js_sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    token_hash TEXT NOT NULL UNIQUE,
-    user_id INTEGER NOT NULL,
-    expires_at TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-  );
-  CREATE INDEX IF NOT EXISTS js_sessions_user_id_index ON js_sessions(user_id);
-  CREATE INDEX IF NOT EXISTS js_sessions_expires_at_index ON js_sessions(expires_at);
-`);
+type QueryExecutor = Pick<Client, "execute"> | Pick<Transaction, "execute">;
+const transactionContext = new AsyncLocalStorage<QueryExecutor>();
 
-export type SqlValue = string | number | bigint | null | Uint8Array;
-
-export function all<T>(sql: string, ...values: SqlValue[]): T[] {
-  return db.prepare(sql).all(...values) as T[];
+function executor() {
+  return transactionContext.getStore() ?? db;
 }
 
-export function one<T>(sql: string, ...values: SqlValue[]): T | null {
-  return (db.prepare(sql).get(...values) as T | undefined) ?? null;
+async function execute(sql: string, values: InValue[]): Promise<ResultSet> {
+  return executor().execute({ sql, args: values });
 }
 
-export function run(sql: string, ...values: SqlValue[]) {
-  return db.prepare(sql).run(...values) as {
-    changes: number;
-    lastInsertRowid: number | bigint;
+export async function all<T>(sql: string, ...values: InValue[]): Promise<T[]> {
+  const result = await execute(sql, values);
+  return result.rows as unknown as T[];
+}
+
+export async function one<T>(sql: string, ...values: InValue[]): Promise<T | null> {
+  const rows = await all<T>(sql, ...values);
+  return rows[0] ?? null;
+}
+
+export async function run(sql: string, ...values: InValue[]) {
+  const result = await execute(sql, values);
+  return {
+    changes: result.rowsAffected,
+    lastInsertRowid: result.lastInsertRowid ?? 0,
   };
 }
 
-export function transaction<T>(callback: () => T): T {
-  db.exec("BEGIN IMMEDIATE");
+export async function transaction<T>(callback: () => Promise<T>): Promise<T> {
+  const tx = await db.transaction("write");
   try {
-    const result = callback();
-    db.exec("COMMIT");
+    const result = await transactionContext.run(tx, callback);
+    await tx.commit();
     return result;
   } catch (error) {
-    db.exec("ROLLBACK");
+    await tx.rollback();
     throw error;
+  } finally {
+    tx.close();
   }
 }
 
 export function now() {
   return new Date().toISOString().replace("T", " ").replace("Z", "");
 }
-

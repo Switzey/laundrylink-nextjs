@@ -14,11 +14,11 @@ type Address = { id: number; label: string | null; address: string; city: string
 export default async function NewOrderPage({ searchParams }: { searchParams: Promise<{ cleaner?: string; error?: string }> }) {
   const user = await requireUser("customer");
   const { cleaner: cleanerParam, error } = await searchParams;
-  const cleaners = all<Cleaner>("SELECT * FROM cleaners WHERE is_approved = 1 AND is_available = 1 ORDER BY business_name");
+  const cleaners = await all<Cleaner>("SELECT * FROM cleaners WHERE is_approved = 1 AND is_available = 1 ORDER BY business_name");
   const cleanerId = Number(cleanerParam ?? 0);
-  const selectedCleaner = cleanerId ? one<Cleaner>("SELECT * FROM cleaners WHERE id = ? AND is_approved = 1 AND is_available = 1", cleanerId) : null;
-  const services = selectedCleaner ? all<Service>("SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1 ORDER BY name", selectedCleaner.id) : [];
-  const addresses = all<Address>("SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, label", user.id);
+  const selectedCleaner = cleanerId ? await one<Cleaner>("SELECT * FROM cleaners WHERE id = ? AND is_approved = 1 AND is_available = 1", cleanerId) : null;
+  const services = selectedCleaner ? await all<Service>("SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1 ORDER BY name", selectedCleaner.id) : [];
+  const addresses = await all<Address>("SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, label", user.id);
   const today = new Date().toISOString().slice(0, 10);
   return (
     <div className="page">

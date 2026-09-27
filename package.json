@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "db:setup": "node scripts/setup-database.mjs",
+    "db:setup:turso": "node scripts/setup-turso.mjs",
     "predev": "node scripts/setup-database.mjs",
     "dev": "next dev",
     "prebuild": "node scripts/setup-database.mjs",
@@ -14,6 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "lucide-react": "^1.48.0",

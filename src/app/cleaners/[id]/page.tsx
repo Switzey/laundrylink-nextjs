@@ -11,10 +11,10 @@ type Review = { id: number; rating: number; comment: string | null; customer_nam
 
 export default async function CleanerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const id = Number((await params).id);
-  const cleaner = one<Cleaner>("SELECT * FROM cleaners WHERE id = ? AND is_approved = 1", id);
+  const cleaner = await one<Cleaner>("SELECT * FROM cleaners WHERE id = ? AND is_approved = 1", id);
   if (!cleaner) notFound();
-  const services = all<Service>("SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1 ORDER BY name", id);
-  const reviews = all<Review>(`SELECT r.*, u.name AS customer_name FROM reviews r LEFT JOIN users u ON u.id = r.customer_id WHERE r.cleaner_id = ? ORDER BY r.created_at DESC`, id);
+  const services = await all<Service>("SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1 ORDER BY name", id);
+  const reviews = await all<Review>(`SELECT r.*, u.name AS customer_name FROM reviews r LEFT JOIN users u ON u.id = r.customer_id WHERE r.cleaner_id = ? ORDER BY r.created_at DESC`, id);
   return (
     <div className="page">
       <section className="surface overflow-hidden"><div className="h-2 bg-[linear-gradient(90deg,#2563eb,#60a5fa,#14b8a6,#a7f3e0)]" /><div className="grid gap-7 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-end"><div><p className="eyebrow">Approved LaundryLink cleaner</p><h1 className="page-title">{cleaner.business_name}</h1><p className="page-copy">{cleaner.description}</p><div className="mt-5 flex flex-wrap gap-4 text-sm text-zinc-600"><span className="flex items-center gap-2"><MapPin size={17} className="text-brand-blue" />{cleaner.address}, {cleaner.city}</span><span className="flex items-center gap-2"><Clock3 size={17} className="text-brand-teal" />{cleaner.turnaround_time || "Flexible turnaround"}</span><span className="flex items-center gap-2"><Phone size={17} className="text-brand-blue" />{cleaner.phone}</span></div></div><div className="flex items-center gap-3"><span className="inline-flex items-center gap-1.5 text-lg font-bold text-amber-700"><Star size={20} fill="currentColor" />{Number(cleaner.rating).toFixed(1)}</span><Link className="btn-primary" href={`/orders/new?cleaner=${cleaner.id}`}>Book this cleaner</Link></div></div></section>

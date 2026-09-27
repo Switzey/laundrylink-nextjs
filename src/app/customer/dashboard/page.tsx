@@ -11,11 +11,11 @@ export const metadata: Metadata = { title: "Customer dashboard" };
 
 export default async function CustomerDashboard() {
   const user = await requireUser("customer");
-  const orders = all<OrderSummary>(`SELECT o.*, c.business_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id WHERE o.customer_id = ? ORDER BY o.created_at DESC`, user.id);
+  const orders = await all<OrderSummary>(`SELECT o.*, c.business_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id WHERE o.customer_id = ? ORDER BY o.created_at DESC`, user.id);
   const active = orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length;
   const completed = orders.filter((order) => order.status === "completed").length;
   const spend = orders.filter((order) => order.payment_status === "paid").reduce((sum, order) => sum + Number(order.total), 0);
-  const addressCount = one<{ count: number }>("SELECT COUNT(1) AS count FROM addresses WHERE user_id = ?", user.id)?.count ?? 0;
+  const addressCount = (await one<{ count: number }>("SELECT COUNT(1) AS count FROM addresses WHERE user_id = ?", user.id))?.count ?? 0;
   return (
     <div className="page">
       <div className="page-header"><div><p className="eyebrow">Customer workspace</p><h1 className="page-title">Good to see you, {user.name.split(" ")[0]}</h1><p className="page-copy">Track every order, schedule the next pickup, and keep your delivery details ready.</p></div><Link className="btn-primary" href="/orders/new"><Plus size={18} />New order</Link></div>

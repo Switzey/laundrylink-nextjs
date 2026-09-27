@@ -10,7 +10,7 @@ export default async function CleanersPage({ searchParams }: { searchParams: Pro
   const { q = "", sort = "rating" } = await searchParams;
   const search = `%${q}%`;
   const orderBy = sort === "name" ? "c.business_name ASC" : sort === "services" ? "services_count DESC" : "c.rating DESC";
-  const cleaners = all<Cleaner>(
+  const cleaners = await all<Cleaner>(
     `SELECT c.*, COUNT(DISTINCT s.id) AS services_count, COUNT(DISTINCT r.id) AS reviews_count
      FROM cleaners c LEFT JOIN services s ON s.cleaner_id = c.id AND s.is_active = 1 LEFT JOIN reviews r ON r.cleaner_id = c.id
      WHERE c.is_approved = 1 AND c.is_available = 1 AND (c.business_name LIKE ? OR c.city LIKE ? OR s.name LIKE ?)

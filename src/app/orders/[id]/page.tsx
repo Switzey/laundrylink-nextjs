@@ -19,14 +19,14 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
   const user = await requireUser();
   const orderId = Number((await params).id);
   const message = await searchParams;
-  const order = one<OrderDetail>(`SELECT o.*, c.business_name, c.user_id AS cleaner_user_id, u.name AS customer_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id LEFT JOIN users u ON u.id = o.customer_id WHERE o.id = ?`, orderId);
+  const order = await one<OrderDetail>(`SELECT o.*, c.business_name, c.user_id AS cleaner_user_id, u.name AS customer_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id LEFT JOIN users u ON u.id = o.customer_id WHERE o.id = ?`, orderId);
   if (!order) notFound();
-  const cleanerId = user.role === "cleaner" ? cleanerIdForUser(user.id) : null;
+  const cleanerId = user.role === "cleaner" ? await cleanerIdForUser(user.id) : null;
   if (user.role === "customer" && order.customer_id !== user.id) redirect("/customer/dashboard");
   if (user.role === "cleaner" && order.cleaner_id !== cleanerId) redirect("/cleaner/dashboard");
-  const items = all<Item>(`SELECT oi.id, s.name, s.unit, oi.quantity, oi.price FROM order_items oi JOIN services s ON s.id = oi.service_id WHERE oi.order_id = ?`, orderId);
-  const activities = all<Activity>(`SELECT a.*, u.name AS user_name FROM order_activities a LEFT JOIN users u ON u.id = a.user_id WHERE a.order_id = ? ORDER BY a.created_at`, orderId);
-  const review = one<Review>(`SELECT r.rating, r.comment, u.name AS customer_name FROM reviews r LEFT JOIN users u ON u.id = r.customer_id WHERE r.order_id = ?`, orderId);
+  const items = await all<Item>(`SELECT oi.id, s.name, s.unit, oi.quantity, oi.price FROM order_items oi JOIN services s ON s.id = oi.service_id WHERE oi.order_id = ?`, orderId);
+  const activities = await all<Activity>(`SELECT a.*, u.name AS user_name FROM order_activities a LEFT JOIN users u ON u.id = a.user_id WHERE a.order_id = ? ORDER BY a.created_at`, orderId);
+  const review = await one<Review>(`SELECT r.rating, r.comment, u.name AS customer_name FROM reviews r LEFT JOIN users u ON u.id = r.customer_id WHERE r.order_id = ?`, orderId);
   const nextStatuses = STATUS_FLOW[order.status] ?? [];
   return (
     <div className="page">

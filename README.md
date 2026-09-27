@@ -21,7 +21,9 @@ The local SQLite database is stored at `data/laundrylink.sqlite` and is intentio
 
 ## Vercel deployment
 
-Vercel deployments copy the safe demo database to the function's writable `/tmp` directory. This keeps login and mutation flows usable for previews, but data created on Vercel is temporary and can reset when a function instance is recycled. Use a managed database before accepting production customer data.
+Production uses Turso's managed SQLite-compatible database through `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Without those variables, the app uses the local database at `data/laundrylink.sqlite`.
+
+To initialize an empty Turso database, run `npm run db:setup:turso`. The migration generates a fresh sanitized seed and refuses to upload a custom source containing accounts outside the documented `@example.com` demo allowlist.
 
 ## Demo accounts
 

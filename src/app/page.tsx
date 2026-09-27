@@ -5,8 +5,8 @@ import { CleanerCard } from "@/components/cleaner-card";
 import { all } from "@/lib/db";
 import type { Cleaner } from "@/lib/types";
 
-export default function HomePage() {
-  const featured = all<Cleaner>(
+export default async function HomePage() {
+  const featured = await all<Cleaner>(
     `SELECT c.*, COUNT(DISTINCT s.id) AS services_count, COUNT(DISTINCT r.id) AS reviews_count
      FROM cleaners c
      LEFT JOIN services s ON s.cleaner_id = c.id AND s.is_active = 1

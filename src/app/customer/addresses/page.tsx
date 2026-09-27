@@ -10,7 +10,7 @@ type Address = { id: number; label: string | null; address: string; city: string
 export default async function AddressesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user = await requireUser("customer");
   const { error } = await searchParams;
-  const addresses = all<Address>("SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, label", user.id);
+  const addresses = await all<Address>("SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, label", user.id);
   return (
     <div className="page">
       <div className="page-header"><div><p className="eyebrow">Pickup and delivery</p><h1 className="page-title">Saved addresses</h1><p className="page-copy">Keep frequently used addresses ready for faster checkout.</p></div></div>
