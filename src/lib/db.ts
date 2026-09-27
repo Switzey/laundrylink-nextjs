@@ -1,13 +1,22 @@
 import "server-only";
 
+import { copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
 // Node 24 ships SQLite natively. The project intentionally avoids a PHP or ORM runtime.
 // @ts-expect-error The scaffold currently bundles Node 20 type definitions.
 import { DatabaseSync } from "node:sqlite";
 
+const bundledDatabasePath = path.join(process.cwd(), "data", "laundrylink.sqlite");
 const databasePath =
-  process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", "laundrylink.sqlite");
+  process.env.DATABASE_PATH ??
+  (process.env.VERCEL ? path.join("/tmp", "laundrylink.sqlite") : bundledDatabasePath);
+
+// Vercel functions are read-only outside /tmp. Start each cold instance from the
+// safe demo seed so reads and server actions both work in hosted previews.
+if (process.env.VERCEL && !process.env.DATABASE_PATH && !existsSync(databasePath)) {
+  copyFileSync(bundledDatabasePath, databasePath);
+}
 
 const globalForDatabase = globalThis as unknown as {
   laundryLinkDatabase?: InstanceType<typeof DatabaseSync>;

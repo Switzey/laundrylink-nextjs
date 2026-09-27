@@ -19,6 +19,10 @@ Open `http://127.0.0.1:3000`.
 
 The local SQLite database is stored at `data/laundrylink.sqlite` and is intentionally excluded from Git because it contains account data. The setup command creates a safe demo database when no local database exists. Set `DATABASE_PATH` to an absolute SQLite path when a different database should be used.
 
+## Vercel deployment
+
+Vercel deployments copy the safe demo database to the function's writable `/tmp` directory. This keeps login and mutation flows usable for previews, but data created on Vercel is temporary and can reset when a function instance is recycled. Use a managed database before accepting production customer data.
+
 ## Demo accounts
 
 All seeded demo accounts use the password `password`.
