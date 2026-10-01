@@ -49,7 +49,7 @@ const passwordSchema = z.object({
 export async function saveAddressAction(formData: FormData) {
   const { user, context } = await authorizeAction({
     action: "address.create",
-    roles: "customer",
+    roles: "CUSTOMER",
     rateLimit: { limit: 20, windowSeconds: 60 },
   });
   const input = parseFormOrRedirect(addressSchema, formData, "/customer/addresses", "Enter a valid address.");
@@ -85,7 +85,7 @@ export async function saveAddressAction(formData: FormData) {
 }
 
 export async function deleteAddressAction(formData: FormData) {
-  const { user, context } = await authorizeAction({ action: "address.delete", roles: "customer" });
+  const { user, context } = await authorizeAction({ action: "address.delete", roles: "CUSTOMER" });
   const { address_id: addressId } = parseFormOrRedirect(
     addressIdSchema,
     formData,

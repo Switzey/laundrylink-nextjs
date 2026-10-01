@@ -9,7 +9,7 @@ import { cleanerIdForUser } from "@/lib/auth";
 import { DELIVERY_FEE, PLATFORM_FEE, STATUS_FLOW, TIME_WINDOWS } from "@/lib/constants";
 import { all, now, one, run, transaction } from "@/lib/db";
 import { isoDate, optionalTextField, parseFormOrRedirect, positiveId } from "@/lib/validation";
-import type { Service } from "@/lib/types";
+import { VENDOR_ROLES, type Service } from "@/lib/types";
 
 const optionalDate = z.preprocess(
   (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -96,7 +96,7 @@ async function activity(orderId: number, userId: number | null, action: string, 
 export async function createOrderAction(formData: FormData) {
   const { user, context } = await authorizeAction({
     action: "order.create",
-    roles: "customer",
+    roles: "CUSTOMER",
     rateLimit: { limit: 10, windowSeconds: 60 },
   });
   const input = parseFormOrRedirect(createOrderSchema, formData, "/orders/new", "Enter valid order details.");
@@ -211,7 +211,7 @@ export async function createOrderAction(formData: FormData) {
 }
 
 export async function updateOrderStatusAction(formData: FormData) {
-  const { user, context } = await authorizeAction({ action: "order.status_update", roles: "cleaner" });
+  const { user, context } = await authorizeAction({ action: "order.status_update", roles: VENDOR_ROLES });
   const input = parseFormOrRedirect(statusSchema, formData, "/cleaner/dashboard", "Choose a valid order status.");
   const cleanerId = await cleanerIdForUser(user.id);
   const order = await one<{
@@ -255,7 +255,7 @@ export async function updateOrderStatusAction(formData: FormData) {
 }
 
 export async function rescheduleOrderAction(formData: FormData) {
-  const { user, context } = await authorizeAction({ action: "order.reschedule", roles: "customer" });
+  const { user, context } = await authorizeAction({ action: "order.reschedule", roles: "CUSTOMER" });
   const input = parseFormOrRedirect(rescheduleSchema, formData, "/customer/dashboard", "Choose a valid schedule.");
   const order = await one<{ id: number; customer_id: number; cleaner_user_id: number | null; status: string }>(
     `SELECT o.id, o.customer_id, o.status, c.user_id AS cleaner_user_id
@@ -291,7 +291,7 @@ export async function rescheduleOrderAction(formData: FormData) {
 }
 
 export async function createReviewAction(formData: FormData) {
-  const { user, context } = await authorizeAction({ action: "review.create", roles: "customer", rateLimit: { limit: 10, windowSeconds: 60 } });
+  const { user, context } = await authorizeAction({ action: "review.create", roles: "CUSTOMER", rateLimit: { limit: 10, windowSeconds: 60 } });
   const input = parseFormOrRedirect(reviewSchema, formData, "/customer/dashboard", "Enter a valid review.");
   const order = await one<{ id: number; customer_id: number; cleaner_id: number; cleaner_user_id: number | null; status: string }>(
     `SELECT o.id, o.customer_id, o.cleaner_id, o.status, c.user_id AS cleaner_user_id

@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { hashSync } from "bcryptjs";
+import { applyAuthSchemaToSqlite } from "./auth-schema.mjs";
 import { applySecuritySchemaToSqlite } from "./security-schema.mjs";
 
 if (process.env.TURSO_DATABASE_URL && !process.env.DATABASE_PATH) {
@@ -23,8 +24,9 @@ db.exec(`
     email TEXT NOT NULL UNIQUE,
     email_verified_at TEXT,
     password TEXT NOT NULL,
-    role TEXT NOT NULL DEFAULT 'customer',
+    role TEXT NOT NULL DEFAULT 'CUSTOMER',
     phone TEXT,
+    phone_verified_at TEXT,
     address TEXT,
     remember_token TEXT,
     created_at TEXT,
@@ -186,6 +188,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS notifications_user_read_index ON notifications(user_id, read_at);
   CREATE INDEX IF NOT EXISTS activities_order_created_index ON order_activities(order_id, created_at);
 `);
+applyAuthSchemaToSqlite(db);
 applySecuritySchemaToSqlite(db);
 
 const existingUsers = db.prepare("SELECT COUNT(1) AS count FROM users").get().count;
@@ -197,15 +200,15 @@ if (existingUsers > 0) {
 const timestamp = new Date().toISOString();
 const password = hashSync(process.env.DEMO_PASSWORD || "development-password", 12);
 const insertUser = db.prepare(`
-  INSERT INTO users (name, email, password, role, phone, address, created_at, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO users (name, email, email_verified_at, password, role, phone, phone_verified_at, address, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 db.exec("BEGIN IMMEDIATE");
 try {
-  const adminId = Number(insertUser.run("Ada Admin", "admin@example.com", password, "admin", "08010000001", "12 Marina Road, Lagos", timestamp, timestamp).lastInsertRowid);
-  const customerId = Number(insertUser.run("Tola Martins", "customer@example.com", password, "customer", "08020000001", "14 Admiralty Way, Lekki", timestamp, timestamp).lastInsertRowid);
-  const cleanerUserId = Number(insertUser.run("Bisi Fresh", "cleaner@example.com", password, "cleaner", "08030000001", "8 Admiralty Road, Lagos", timestamp, timestamp).lastInsertRowid);
+  const adminId = Number(insertUser.run("Ada Admin", "admin@example.com", timestamp, password, "ADMIN", "08010000001", timestamp, "12 Marina Road, Lagos", timestamp, timestamp).lastInsertRowid);
+  const customerId = Number(insertUser.run("Tola Martins", "customer@example.com", timestamp, password, "CUSTOMER", "08020000001", timestamp, "14 Admiralty Way, Lekki", timestamp, timestamp).lastInsertRowid);
+  const cleanerUserId = Number(insertUser.run("Bisi Fresh", "cleaner@example.com", timestamp, password, "VENDOR_OWNER", "08030000001", timestamp, "8 Admiralty Road, Lagos", timestamp, timestamp).lastInsertRowid);
 
   db.prepare(`INSERT INTO addresses (user_id, label, address, city, phone, is_default, delivery_notes, created_at, updated_at) VALUES (?, 'Home', ?, 'Lagos', ?, 1, ?, ?, ?)`)
     .run(customerId, "14 Admiralty Way, Lekki", "08020000001", "Call at the estate gate before arrival.", timestamp, timestamp);
@@ -214,6 +217,8 @@ try {
     INSERT INTO cleaners (user_id, business_name, description, address, city, phone, rating, turnaround_time, opening_hours, is_available, is_approved, created_at, updated_at)
     VALUES (?, 'FreshFold Laundry', 'Neighborhood wash, fold, and dry-cleaning with careful packaging.', '8 Admiralty Road', 'Lagos', '08030000001', 4.8, '24-48 hours', 'Mon-Sat, 8am-6pm', 1, 1, ?, ?)
   `).run(cleanerUserId, timestamp, timestamp).lastInsertRowid);
+
+  db.prepare(`INSERT INTO vendor_memberships (cleaner_id, user_id, role, created_at, updated_at) VALUES (?, ?, 'VENDOR_OWNER', ?, ?)`).run(cleanerId, cleanerUserId, timestamp, timestamp);
 
   const insertService = db.prepare(`INSERT INTO services (cleaner_id, name, description, price, unit, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`);
   insertService.run(cleanerId, "Shirt Laundry", "Washed, pressed, and folded shirts.", 1200, "per_item", timestamp, timestamp);

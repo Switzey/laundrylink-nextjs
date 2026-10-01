@@ -51,7 +51,41 @@ export const appConfig = Object.freeze({
     process.env.SESSION_COOKIE_NAME?.trim() ||
     (appEnvironment === "production" ? "__Host-laundrylink_session" : "laundrylink_session"),
   logLevel: process.env.LOG_LEVEL === "debug" ? "debug" : "info",
+  email: Object.freeze({
+    resendApiKey: process.env.RESEND_API_KEY?.trim() || null,
+    from: process.env.AUTH_EMAIL_FROM?.trim() || null,
+  }),
+  oauth: Object.freeze({
+    googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || null,
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || null,
+    appleClientId: process.env.APPLE_CLIENT_ID?.trim() || null,
+    appleClientSecret: process.env.APPLE_CLIENT_SECRET?.trim() || null,
+  }),
+  phone: Object.freeze({
+    twilioAccountSid: process.env.TWILIO_ACCOUNT_SID?.trim() || null,
+    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN?.trim() || null,
+    twilioVerifyServiceSid: process.env.TWILIO_VERIFY_SERVICE_SID?.trim() || null,
+  }),
 });
+
+export function emailDeliveryConfigured() {
+  return Boolean(appConfig.origin && appConfig.email.resendApiKey && appConfig.email.from);
+}
+
+export function oauthProviderConfigured(provider: "google" | "apple") {
+  if (!appConfig.origin) return false;
+  return provider === "google"
+    ? Boolean(appConfig.oauth.googleClientId && appConfig.oauth.googleClientSecret)
+    : Boolean(appConfig.oauth.appleClientId && appConfig.oauth.appleClientSecret);
+}
+
+export function phoneVerificationConfigured() {
+  return Boolean(
+    appConfig.phone.twilioAccountSid &&
+    appConfig.phone.twilioAuthToken &&
+    appConfig.phone.twilioVerifyServiceSid,
+  );
+}
 
 export function hostedDatabaseConfig() {
   const url = process.env.TURSO_DATABASE_URL?.trim() || undefined;

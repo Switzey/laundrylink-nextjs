@@ -32,6 +32,17 @@ Use isolated credentials and databases for each environment:
 
 Required hosted variables are `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and `AUDIT_LOG_SALT`. Set `APP_ORIGIN` to the canonical HTTPS origin. Vercel supplies deployment URL variables automatically; use `TRUSTED_ORIGINS` only for additional trusted reverse-proxy origins.
 
+Authentication integrations are optional but must be configured before their flows become available:
+
+| Capability | Variables | Provider configuration |
+| --- | --- | --- |
+| Verification and reset email | `RESEND_API_KEY`, `AUTH_EMAIL_FROM` | Verify the sending domain in Resend. |
+| Google sign-in | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Register `${APP_ORIGIN}/api/auth/oauth/google/callback`. |
+| Apple sign-in | `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET` | Register `${APP_ORIGIN}/api/auth/oauth/apple/callback`; the secret is Apple's signed client-secret JWT. |
+| Phone verification | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SERVICE_SID` | Create a Twilio Verify service with SMS enabled. |
+
+Never commit provider credentials. Configure separate values for preview and production deployments. Email registration is closed when email delivery is unavailable, and vendor registration is also closed when phone verification is unavailable, so accounts cannot be created in an unverifiable state.
+
 Run the idempotent schema migration against each hosted database before deploying:
 
 ```bash
@@ -48,6 +59,8 @@ Rotate an account password from a trusted terminal by supplying `USER_EMAIL` and
 - Every Server Action authenticates and authorizes on the server. UI visibility is never treated as authorization.
 - Ownership-sensitive updates include the authenticated user or cleaner identity in their database predicates.
 - Opaque session tokens are stored only in secure HTTP-only cookies; only SHA-256 token hashes are stored in the database.
+- Google, Apple, and email/password identities all resolve to the same `users` table. Verified provider emails may link to an existing identity; provider subject identifiers are uniquely constrained.
+- Roles are `CUSTOMER`, `VENDOR_OWNER`, `VENDOR_MANAGER`, `VENDOR_STAFF`, `RIDER`, `SUPPORT_AGENT`, `ADMIN`, and `SUPER_ADMIN`. Protected pages and every mutation enforce role permissions on the server.
 - Server Actions enforce trusted origins, bounded request bodies, Zod input schemas, and persistent database-backed rate limits.
 - React output escaping and a Content Security Policy protect rendered user content; no raw HTML rendering is used.
 - File uploads are not supported by the current product. Any future upload endpoint must add explicit MIME allowlists, byte-size limits, randomized storage names, and content scanning before it is enabled.

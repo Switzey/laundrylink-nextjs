@@ -5,7 +5,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
 import { enforceRateLimit, type RateLimitRule } from "@/lib/rate-limit";
 import { assertTrustedMutation, opaqueIdentifier } from "@/lib/request-security";
-import type { Role, User } from "@/lib/types";
+import { roleRequiresPhoneVerification, type Role, type User } from "@/lib/types";
 
 const DEFAULT_ACTION_LIMIT = { limit: 60, windowSeconds: 60 } satisfies RateLimitRule;
 
@@ -13,6 +13,7 @@ type ProtectedActionOptions = {
   action: string;
   roles?: Role | Role[];
   rateLimit?: RateLimitRule;
+  allowUnverified?: boolean;
 };
 
 export async function authorizeAction(options: ProtectedActionOptions) {
@@ -36,6 +37,11 @@ export async function authorizeAction(options: ProtectedActionOptions) {
       context,
     });
     redirect("/dashboard");
+  }
+
+  if (!options.allowUnverified && !user.email_verified_at) redirect("/verify-email");
+  if (!options.allowUnverified && roleRequiresPhoneVerification(user.role) && !user.phone_verified_at) {
+    redirect("/verify-phone");
   }
 
   await enforceRateLimit(options.action, `user:${user.id}`, options.rateLimit ?? DEFAULT_ACTION_LIMIT, context);

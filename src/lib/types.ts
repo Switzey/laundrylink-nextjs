@@ -1,4 +1,26 @@
-export type Role = "customer" | "cleaner" | "admin";
+export const ROLES = [
+  "CUSTOMER",
+  "VENDOR_OWNER",
+  "VENDOR_MANAGER",
+  "VENDOR_STAFF",
+  "RIDER",
+  "SUPPORT_AGENT",
+  "ADMIN",
+  "SUPER_ADMIN",
+] as const;
+
+export type Role = (typeof ROLES)[number];
+
+export const CUSTOMER_ROLES: Role[] = ["CUSTOMER"];
+export const VENDOR_ROLES: Role[] = ["VENDOR_OWNER", "VENDOR_MANAGER", "VENDOR_STAFF"];
+export const VENDOR_MANAGEMENT_ROLES: Role[] = ["VENDOR_OWNER", "VENDOR_MANAGER"];
+export const ADMIN_ROLES: Role[] = ["ADMIN", "SUPER_ADMIN"];
+export const SUPPORT_ROLES: Role[] = ["SUPPORT_AGENT", "ADMIN", "SUPER_ADMIN"];
+export const LOGISTICS_ROLES: Role[] = ["RIDER", "SUPPORT_AGENT", "ADMIN", "SUPER_ADMIN"];
+
+export function roleRequiresPhoneVerification(role: Role) {
+  return VENDOR_ROLES.includes(role) || role === "RIDER";
+}
 
 export interface User {
   id: number;
@@ -7,6 +29,8 @@ export interface User {
   role: Role;
   phone: string | null;
   address: string | null;
+  email_verified_at: string | null;
+  phone_verified_at: string | null;
 }
 
 export interface Cleaner {

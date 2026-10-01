@@ -8,6 +8,7 @@ import { authorizeAction } from "@/lib/authorization";
 import { cleanerIdForUser } from "@/lib/auth";
 import { now, one, run, transaction } from "@/lib/db";
 import { boundedMoney, optionalTextField, parseFormOrRedirect, positiveId, textField } from "@/lib/validation";
+import { VENDOR_MANAGEMENT_ROLES } from "@/lib/types";
 
 const serviceSchema = z.object({
   name: textField(2, 120),
@@ -28,7 +29,7 @@ const cleanerProfileSchema = z.object({
 });
 
 export async function addServiceAction(formData: FormData) {
-  const { user, context } = await authorizeAction({ action: "cleaner.service_create", roles: "cleaner" });
+  const { user, context } = await authorizeAction({ action: "cleaner.service_create", roles: VENDOR_MANAGEMENT_ROLES });
   const cleanerId = await cleanerIdForUser(user.id);
   if (!cleanerId) redirect("/cleaner/services?error=Cleaner+profile+not+found");
   const input = parseFormOrRedirect(serviceSchema, formData, "/cleaner/services", "Enter valid service details.");
@@ -58,7 +59,7 @@ export async function addServiceAction(formData: FormData) {
 }
 
 export async function toggleServiceAction(formData: FormData) {
-  const { user, context } = await authorizeAction({ action: "cleaner.service_toggle", roles: "cleaner" });
+  const { user, context } = await authorizeAction({ action: "cleaner.service_toggle", roles: VENDOR_MANAGEMENT_ROLES });
   const cleanerId = await cleanerIdForUser(user.id);
   if (!cleanerId) redirect("/cleaner/services?error=Cleaner+profile+not+found");
   const { service_id: serviceId } = parseFormOrRedirect(serviceIdSchema, formData, "/cleaner/services", "Choose a valid service.");
@@ -77,7 +78,7 @@ export async function toggleServiceAction(formData: FormData) {
 }
 
 export async function deleteServiceAction(formData: FormData) {
-  const { user, context } = await authorizeAction({ action: "cleaner.service_delete", roles: "cleaner" });
+  const { user, context } = await authorizeAction({ action: "cleaner.service_delete", roles: VENDOR_MANAGEMENT_ROLES });
   const cleanerId = await cleanerIdForUser(user.id);
   if (!cleanerId) redirect("/cleaner/services?error=Cleaner+profile+not+found");
   const { service_id: serviceId } = parseFormOrRedirect(serviceIdSchema, formData, "/cleaner/services", "Choose a valid service.");
@@ -93,7 +94,7 @@ export async function deleteServiceAction(formData: FormData) {
 export async function updateCleanerProfileAction(formData: FormData) {
   const { user, context } = await authorizeAction({
     action: "cleaner.profile_update",
-    roles: "cleaner",
+    roles: VENDOR_MANAGEMENT_ROLES,
     rateLimit: { limit: 10, windowSeconds: 60 },
   });
   const cleanerId = await cleanerIdForUser(user.id);

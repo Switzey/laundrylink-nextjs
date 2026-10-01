@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Book laundry" };
 type Address = { id: number; label: string | null; address: string; city: string; is_default: number };
 
 export default async function NewOrderPage({ searchParams }: { searchParams: Promise<{ cleaner?: string; error?: string }> }) {
-  const user = await requireUser("customer");
+  const user = await requireUser("CUSTOMER");
   const { cleaner: cleanerParam, error } = await searchParams;
   const cleaners = await all<Cleaner>("SELECT * FROM cleaners WHERE is_approved = 1 AND is_available = 1 ORDER BY business_name");
   const cleanerId = Number(cleanerParam ?? 0);

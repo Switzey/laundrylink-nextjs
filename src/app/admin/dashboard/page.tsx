@@ -4,6 +4,7 @@ import { ArrowRight, Check, ShieldCheck, X } from "lucide-react";
 import { setCleanerApprovalAction } from "@/app/actions/admin";
 import { StatusBadge } from "@/components/status-badge";
 import { requireUser } from "@/lib/auth";
+import { ADMIN_ROLES } from "@/lib/types";
 import { all, one } from "@/lib/db";
 import { money } from "@/lib/format";
 import type { Cleaner, OrderSummary } from "@/lib/types";
@@ -11,7 +12,7 @@ import type { Cleaner, OrderSummary } from "@/lib/types";
 export const metadata: Metadata = { title: "Admin dashboard" };
 
 export default async function AdminDashboardPage() {
-  await requireUser("admin");
+  await requireUser(ADMIN_ROLES);
   const stats = await one<{ users: number; cleaners: number; active_orders: number; volume: number }>(`SELECT (SELECT COUNT(1) FROM users) AS users, (SELECT COUNT(1) FROM cleaners WHERE is_approved = 1) AS cleaners, (SELECT COUNT(1) FROM orders WHERE status NOT IN ('completed','cancelled')) AS active_orders, (SELECT COALESCE(SUM(total),0) FROM orders WHERE status = 'completed') AS volume`);
   const cleaners = await all<Cleaner>("SELECT * FROM cleaners ORDER BY is_approved ASC, created_at DESC");
   const orders = await all<OrderSummary>(`SELECT o.*, c.business_name, u.name AS customer_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id LEFT JOIN users u ON u.id = o.customer_id ORDER BY o.created_at DESC LIMIT 8`);

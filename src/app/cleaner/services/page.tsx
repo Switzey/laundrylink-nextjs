@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Pause, Play, Trash2 } from "lucide-react";
 import { addServiceAction, deleteServiceAction, toggleServiceAction } from "@/app/actions/cleaner";
 import { cleanerIdForUser, requireUser } from "@/lib/auth";
+import { VENDOR_MANAGEMENT_ROLES } from "@/lib/types";
 import { all } from "@/lib/db";
 import { money } from "@/lib/format";
 import type { Service } from "@/lib/types";
@@ -9,7 +10,7 @@ import type { Service } from "@/lib/types";
 export const metadata: Metadata = { title: "Manage services" };
 
 export default async function CleanerServicesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const user = await requireUser("cleaner");
+  const user = await requireUser(VENDOR_MANAGEMENT_ROLES);
   const cleanerId = await cleanerIdForUser(user.id);
   const { error } = await searchParams;
   const services = cleanerId ? await all<Service>("SELECT * FROM services WHERE cleaner_id = ? ORDER BY is_active DESC, name", cleanerId) : [];

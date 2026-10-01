@@ -3,6 +3,7 @@ import { Bell, LayoutDashboard, LogIn, Menu, ShoppingBag, UserRound } from "luci
 import { logoutAction } from "@/app/actions/auth";
 import { getCurrentUser, dashboardForRole } from "@/lib/auth";
 import { BrandLogo } from "@/components/brand-logo";
+import { ADMIN_ROLES, LOGISTICS_ROLES, VENDOR_MANAGEMENT_ROLES } from "@/lib/types";
 
 export async function SiteHeader() {
   const user = await getCurrentUser();
@@ -13,9 +14,10 @@ export async function SiteHeader() {
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary navigation">
           <Link className="nav-link" href="/cleaners">Find a cleaner</Link>
           {user && <Link className="nav-link" href={dashboardForRole(user.role)}>Dashboard</Link>}
-          {user?.role === "customer" && <Link className="nav-link" href="/orders/new">Book laundry</Link>}
-          {user?.role === "cleaner" && <Link className="nav-link" href="/cleaner/services">Services</Link>}
-          {user?.role === "admin" && <Link className="nav-link" href="/admin/logistics">Logistics</Link>}
+          {user?.role === "CUSTOMER" && <Link className="nav-link" href="/orders/new">Book laundry</Link>}
+          {user && VENDOR_MANAGEMENT_ROLES.includes(user.role) && <Link className="nav-link" href="/cleaner/services">Services</Link>}
+          {user && LOGISTICS_ROLES.includes(user.role) && <Link className="nav-link" href="/admin/logistics">Logistics</Link>}
+          {user && ADMIN_ROLES.includes(user.role) && <Link className="nav-link" href="/admin/reports">Reports</Link>}
         </nav>
         <div className="hidden items-center gap-2 md:flex">
           {user ? <>

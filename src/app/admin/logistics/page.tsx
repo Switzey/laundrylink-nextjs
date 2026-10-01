@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, Search } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { requireUser } from "@/lib/auth";
+import { LOGISTICS_ROLES } from "@/lib/types";
 import { all } from "@/lib/db";
 import { dateLabel, money } from "@/lib/format";
 import { boundedSearchTerm, likePattern } from "@/lib/validation";
@@ -11,7 +12,7 @@ import type { OrderSummary } from "@/lib/types";
 export const metadata: Metadata = { title: "Logistics" };
 
 export default async function LogisticsPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
-  await requireUser("admin");
+  await requireUser(LOGISTICS_ROLES);
   const { status: requestedStatus = "active", q } = await searchParams;
   const allowedStatuses = ["active", "all", "pending", "accepted", "picked_up", "in_cleaning", "ready", "out_for_delivery", "completed", "cancelled"];
   const status = allowedStatuses.includes(requestedStatus) ? requestedStatus : "active";

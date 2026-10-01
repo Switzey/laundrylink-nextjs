@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { updateCleanerProfileAction } from "@/app/actions/cleaner";
 import { cleanerIdForUser, requireUser } from "@/lib/auth";
+import { VENDOR_MANAGEMENT_ROLES } from "@/lib/types";
 import { one } from "@/lib/db";
 import type { Cleaner } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Cleaner profile" };
 
 export default async function CleanerProfilePage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
-  const user = await requireUser("cleaner");
+  const user = await requireUser(VENDOR_MANAGEMENT_ROLES);
   const cleanerId = await cleanerIdForUser(user.id);
   const cleaner = cleanerId ? await one<Cleaner>("SELECT * FROM cleaners WHERE id = ?", cleanerId) : null;
   const message = await searchParams;

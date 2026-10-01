@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { authorizeAction } from "@/lib/authorization";
 import { now, one, run, transaction } from "@/lib/db";
 import { parseFormOrRedirect, positiveId } from "@/lib/validation";
+import { ADMIN_ROLES, SUPPORT_ROLES } from "@/lib/types";
 
 const approvalSchema = z.object({
   cleaner_id: positiveId,
@@ -16,7 +17,7 @@ const reviewSchema = z.object({ review_id: positiveId });
 export async function setCleanerApprovalAction(formData: FormData) {
   const { user, context } = await authorizeAction({
     action: "admin.cleaner_approval",
-    roles: "admin",
+    roles: ADMIN_ROLES,
     rateLimit: { limit: 30, windowSeconds: 60 },
   });
   const input = parseFormOrRedirect(approvalSchema, formData, "/admin/dashboard", "Choose a valid cleaner.");
@@ -65,7 +66,7 @@ export async function setCleanerApprovalAction(formData: FormData) {
 export async function deleteReviewAction(formData: FormData) {
   const { user, context } = await authorizeAction({
     action: "admin.review_delete",
-    roles: "admin",
+    roles: SUPPORT_ROLES,
     rateLimit: { limit: 20, windowSeconds: 60 },
   });
   const { review_id: reviewId } = parseFormOrRedirect(

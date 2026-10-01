@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, BriefcaseBusiness, CalendarDays, CircleDollarSign, Settings2 } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { cleanerIdForUser, requireUser } from "@/lib/auth";
+import { VENDOR_ROLES } from "@/lib/types";
 import { all, one } from "@/lib/db";
 import { dateLabel, money } from "@/lib/format";
 import type { Cleaner, OrderSummary } from "@/lib/types";
@@ -10,7 +11,7 @@ import type { Cleaner, OrderSummary } from "@/lib/types";
 export const metadata: Metadata = { title: "Cleaner dashboard" };
 
 export default async function CleanerDashboard() {
-  const user = await requireUser("cleaner");
+  const user = await requireUser(VENDOR_ROLES);
   const cleanerId = await cleanerIdForUser(user.id);
   const cleaner = cleanerId ? await one<Cleaner>("SELECT * FROM cleaners WHERE id = ?", cleanerId) : null;
   if (!cleaner) return <div className="page"><div className="surface empty">Your cleaner profile is not ready yet.</div></div>;

@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { createClient } from "@libsql/client";
+import { applyAuthSchemaToLibsql } from "./auth-schema.mjs";
 import { applySecuritySchemaToLibsql } from "./security-schema.mjs";
 
 const url = process.env.TURSO_DATABASE_URL;
@@ -48,6 +49,7 @@ for (const object of objects.filter((item) => item.type === "table")) {
   });
   if (!existingTable.rows.length) await destination.execute(String(object.sql));
 }
+await applyAuthSchemaToLibsql(destination);
 await applySecuritySchemaToLibsql(destination);
 
 const existingUsers = await destination.execute("SELECT COUNT(1) AS count FROM users");
@@ -70,6 +72,9 @@ const tableOrder = [
   "notifications",
   "order_activities",
   "js_sessions",
+  "oauth_accounts",
+  "auth_tokens",
+  "vendor_memberships",
 ];
 
 for (const table of tableOrder) {

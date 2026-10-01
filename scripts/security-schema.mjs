@@ -29,13 +29,13 @@ export const securitySchemaStatements = [
   `CREATE TRIGGER IF NOT EXISTS validate_users_insert BEFORE INSERT ON users BEGIN
     SELECT CASE WHEN length(trim(NEW.name)) NOT BETWEEN 2 AND 100 THEN RAISE(ABORT, 'invalid user name') END;
     SELECT CASE WHEN NEW.email <> lower(trim(NEW.email)) OR length(NEW.email) > 254 OR instr(NEW.email, '@') < 2 THEN RAISE(ABORT, 'invalid email') END;
-    SELECT CASE WHEN NEW.role NOT IN ('admin', 'customer', 'cleaner') THEN RAISE(ABORT, 'invalid user role') END;
+    SELECT CASE WHEN NEW.role NOT IN ('CUSTOMER', 'VENDOR_OWNER', 'VENDOR_MANAGER', 'VENDOR_STAFF', 'RIDER', 'SUPPORT_AGENT', 'ADMIN', 'SUPER_ADMIN') THEN RAISE(ABORT, 'invalid user role') END;
     SELECT CASE WHEN length(NEW.password) NOT BETWEEN 50 AND 255 THEN RAISE(ABORT, 'invalid password hash') END;
   END`,
   `CREATE TRIGGER IF NOT EXISTS validate_users_update BEFORE UPDATE ON users BEGIN
     SELECT CASE WHEN length(trim(NEW.name)) NOT BETWEEN 2 AND 100 THEN RAISE(ABORT, 'invalid user name') END;
     SELECT CASE WHEN NEW.email <> lower(trim(NEW.email)) OR length(NEW.email) > 254 OR instr(NEW.email, '@') < 2 THEN RAISE(ABORT, 'invalid email') END;
-    SELECT CASE WHEN NEW.role NOT IN ('admin', 'customer', 'cleaner') THEN RAISE(ABORT, 'invalid user role') END;
+    SELECT CASE WHEN NEW.role NOT IN ('CUSTOMER', 'VENDOR_OWNER', 'VENDOR_MANAGER', 'VENDOR_STAFF', 'RIDER', 'SUPPORT_AGENT', 'ADMIN', 'SUPER_ADMIN') THEN RAISE(ABORT, 'invalid user role') END;
     SELECT CASE WHEN length(NEW.password) NOT BETWEEN 50 AND 255 THEN RAISE(ABORT, 'invalid password hash') END;
   END`,
   `CREATE TRIGGER IF NOT EXISTS validate_cleaners_insert BEFORE INSERT ON cleaners BEGIN
