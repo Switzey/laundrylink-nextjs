@@ -146,7 +146,18 @@ async function exchangeCode(provider: OAuthProvider, code: string, verifier: str
       cache: "no-store",
     },
   );
-  if (!response.ok) throw new Error(`OAuth token exchange failed with status ${response.status}.`);
+  if (!response.ok) {
+    let providerError = "unknown_error";
+    try {
+      const payload = await response.json() as { error?: unknown };
+      if (typeof payload.error === "string" && /^[a-z0-9_.-]{1,64}$/i.test(payload.error)) {
+        providerError = payload.error;
+      }
+    } catch {
+      // The status and a bounded provider error code are sufficient for diagnostics.
+    }
+    throw new Error(`OAuth token exchange failed with status ${response.status} (${providerError}).`);
+  }
   return response.json() as Promise<{ id_token?: string }>;
 }
 
