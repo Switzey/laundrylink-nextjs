@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { hashSync } from "bcryptjs";
+import { applySecuritySchemaToSqlite } from "./security-schema.mjs";
 
 const databasePath = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "laundrylink.sqlite");
 mkdirSync(path.dirname(databasePath), { recursive: true });
@@ -180,6 +181,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS notifications_user_read_index ON notifications(user_id, read_at);
   CREATE INDEX IF NOT EXISTS activities_order_created_index ON order_activities(order_id, created_at);
 `);
+applySecuritySchemaToSqlite(db);
 
 const existingUsers = db.prepare("SELECT COUNT(1) AS count FROM users").get().count;
 if (existingUsers > 0) {
@@ -188,7 +190,7 @@ if (existingUsers > 0) {
 }
 
 const timestamp = new Date().toISOString();
-const password = hashSync("password", 12);
+const password = hashSync(process.env.DEMO_PASSWORD || "development-password", 12);
 const insertUser = db.prepare(`
   INSERT INTO users (name, email, password, role, phone, address, created_at, updated_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?)

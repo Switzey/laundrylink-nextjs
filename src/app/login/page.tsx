@@ -6,8 +6,8 @@ import { BrandLogo } from "@/components/brand-logo";
 
 export const metadata: Metadata = { title: "Sign in" };
 
-export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string; success?: string }> }) {
+  const { error, success } = await searchParams;
   return (
     <section className="page flex flex-1 items-center justify-center">
       <div className="surface grid w-full max-w-4xl overflow-hidden lg:grid-cols-[.9fr_1.1fr]">
@@ -20,6 +20,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <BrandLogo />
           <h2 className="mt-8 text-2xl font-bold text-brand-navy">Sign in to your account</h2>
           <p className="mt-2 text-sm text-zinc-500">Use the account you created on LaundryLink.</p>
+          {success && <p className="mt-5 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-700">{success}</p>}
           {error && <p className="mt-5 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
           <form action={loginAction} className="mt-6 grid gap-4">
             <label><span className="field-label">Email address</span><span className="relative block"><Mail className="absolute left-3 top-3 text-zinc-400" size={18} /><input className="field pl-10" name="email" type="email" autoComplete="email" required /></span></label>

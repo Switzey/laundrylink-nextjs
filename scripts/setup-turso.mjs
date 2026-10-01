@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { createClient } from "@libsql/client";
+import { applySecuritySchemaToLibsql } from "./security-schema.mjs";
 
 const url = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
@@ -41,8 +42,13 @@ const objects = source.prepare(`
 `).all();
 
 for (const object of objects.filter((item) => item.type === "table")) {
-  await destination.execute(String(object.sql));
+  const existingTable = await destination.execute({
+    sql: "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+    args: [String(object.name)],
+  });
+  if (!existingTable.rows.length) await destination.execute(String(object.sql));
 }
+await applySecuritySchemaToLibsql(destination);
 
 const existingUsers = await destination.execute("SELECT COUNT(1) AS count FROM users");
 if (Number(existingUsers.rows[0]?.count ?? 0) > 0) {
@@ -84,7 +90,11 @@ for (const table of tableOrder) {
 }
 
 for (const object of objects.filter((item) => item.type === "index")) {
-  await destination.execute(String(object.sql));
+  const existingIndex = await destination.execute({
+    sql: "SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?",
+    args: [String(object.name)],
+  });
+  if (!existingIndex.rows.length) await destination.execute(String(object.sql));
 }
 
 console.log("Seeded permanent Turso database from sanitized demo data.");

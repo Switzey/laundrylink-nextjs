@@ -1,52 +1,64 @@
 # LaundryLink Next.js
 
-The full-stack TypeScript edition of LaundryLink. It replaces the Laravel runtime with Next.js server components, server actions, cookie sessions, and Node's native SQLite driver.
+LaundryLink is a full-stack TypeScript application built with the Next.js App Router, React Server Components, Server Actions, and Turso/libSQL.
 
 ## Requirements
 
-- Node.js 24 or newer
-- npm 11 or newer
+- Node.js 20.9 or newer
+- npm 10 or newer
 
-## Run locally
+## Local development
 
 ```bash
 npm install
 npm run db:setup
+npm run db:migrate:security
 npm run dev
 ```
 
-Open `http://127.0.0.1:3000`.
+Open `http://127.0.0.1:3000`. Copy `.env.example` to `.env.local` and provide local values. The local SQLite database under `data/` and all `.env*` files except `.env.example` are excluded from Git.
 
-The local SQLite database is stored at `data/laundrylink.sqlite` and is intentionally excluded from Git because it contains account data. The setup command creates a safe demo database when no local database exists. Set `DATABASE_PATH` to an absolute SQLite path when a different database should be used.
+The optional demo seed uses `DEMO_PASSWORD`, or `development-password` when the variable is unset. Demo credentials are for local development only and must not be reused in staging or production.
 
-## Vercel deployment
+## Environments
 
-Production uses Turso's managed SQLite-compatible database through `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. Without those variables, the app uses the local database at `data/laundrylink.sqlite`.
+Use isolated credentials and databases for each environment:
 
-To initialize an empty Turso database, run `npm run db:setup:turso`. The migration generates a fresh sanitized seed and refuses to upload a custom source containing accounts outside the documented `@example.com` demo allowlist.
+| Environment | `APP_ENV` | Database | Purpose |
+| --- | --- | --- | --- |
+| Local | `development` | Local SQLite | Developer testing |
+| Vercel Preview | `staging` | Dedicated staging Turso DB | QA and acceptance |
+| Vercel Production | `production` | Dedicated production Turso DB | Live customer data |
 
-## Demo accounts
+Required hosted variables are `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and `AUDIT_LOG_SALT`. Set `APP_ORIGIN` to the canonical HTTPS origin. Vercel supplies deployment URL variables automatically; use `TRUSTED_ORIGINS` only for additional trusted reverse-proxy origins.
 
-All seeded demo accounts use the password `password`.
+Run the idempotent schema migration against each hosted database before deploying:
 
-| Role | Email |
-| --- | --- |
-| Administrator | `admin@example.com` |
-| Customer | `customer@example.com` |
-| Cleaner | `cleaner@example.com` |
+```bash
+node --env-file=.env.staging.local scripts/migrate-security.mjs
+node --env-file=.env.production.local scripts/migrate-security.mjs
+```
+
+An empty Turso database can be initialized with `npm run db:setup:turso`. The seeder creates sanitized demo data and refuses a custom seed containing users outside its explicit demo allowlist.
+
+Rotate an account password from a trusted terminal by supplying `USER_EMAIL` and `NEW_PASSWORD` as process environment variables, then running `npm run user:set-password`. The command never prints the password and revokes every existing session for that account.
+
+## Security model
+
+- Every Server Action authenticates and authorizes on the server. UI visibility is never treated as authorization.
+- Ownership-sensitive updates include the authenticated user or cleaner identity in their database predicates.
+- Opaque session tokens are stored only in secure HTTP-only cookies; only SHA-256 token hashes are stored in the database.
+- Server Actions enforce trusted origins, bounded request bodies, Zod input schemas, and persistent database-backed rate limits.
+- React output escaping and a Content Security Policy protect rendered user content; no raw HTML rendering is used.
+- File uploads are not supported by the current product. Any future upload endpoint must add explicit MIME allowlists, byte-size limits, randomized storage names, and content scanning before it is enabled.
+- Database triggers, foreign keys, unique indexes, and checks reject invalid roles, states, prices, ratings, and session records.
+- Security-sensitive mutations write structured audit records. Request failures are emitted as structured server logs without secrets or raw IP addresses.
+- User-facing error boundaries return generic recovery messages; stack traces and database errors remain server-side.
 
 ## Checks
 
 ```bash
-npm run typecheck
-npm run lint
-npm run build
+npm run check
 ```
 
-## Runtime architecture
-
-- Next.js App Router and React server components
-- TypeScript server actions for mutations
-- Native `node:sqlite` parameterized queries
-- Bcrypt-compatible authentication with HTTP-only cookie sessions
-- Tailwind CSS 4 and the LaundryLink brand palette
+This runs TypeScript, ESLint, the dependency security audit, and a production build.

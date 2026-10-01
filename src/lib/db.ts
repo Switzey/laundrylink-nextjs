@@ -5,17 +5,19 @@ import { copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createClient, type Client, type InValue, type ResultSet, type Transaction } from "@libsql/client";
+import { hostedDatabaseConfig } from "@/lib/env";
 
 const bundledDatabasePath = path.join(process.cwd(), "data", "laundrylink.sqlite");
 const localDatabasePath =
   process.env.DATABASE_PATH ??
   (process.env.VERCEL ? path.join("/tmp", "laundrylink.sqlite") : bundledDatabasePath);
+const hostedDatabase = hostedDatabaseConfig();
 
-if (!process.env.TURSO_DATABASE_URL && process.env.VERCEL && !existsSync(localDatabasePath)) {
+if (!hostedDatabase.url && process.env.VERCEL && !existsSync(localDatabasePath)) {
   copyFileSync(bundledDatabasePath, localDatabasePath);
 }
 
-const databaseUrl = process.env.TURSO_DATABASE_URL ?? pathToFileURL(localDatabasePath).href;
+const databaseUrl = hostedDatabase.url ?? pathToFileURL(localDatabasePath).href;
 
 const globalForDatabase = globalThis as unknown as { laundryLinkDatabase?: Client };
 
@@ -23,7 +25,7 @@ export const db =
   globalForDatabase.laundryLinkDatabase ??
   createClient({
     url: databaseUrl,
-    authToken: process.env.TURSO_AUTH_TOKEN,
+    authToken: hostedDatabase.authToken,
   });
 
 if (process.env.NODE_ENV !== "production") {
@@ -32,12 +34,14 @@ if (process.env.NODE_ENV !== "production") {
 
 type QueryExecutor = Pick<Client, "execute"> | Pick<Transaction, "execute">;
 const transactionContext = new AsyncLocalStorage<QueryExecutor>();
+const databaseReady = db.execute("PRAGMA foreign_keys = ON");
 
 function executor() {
   return transactionContext.getStore() ?? db;
 }
 
 async function execute(sql: string, values: InValue[]): Promise<ResultSet> {
+  await databaseReady;
   return executor().execute({ sql, args: values });
 }
 
@@ -60,6 +64,7 @@ export async function run(sql: string, ...values: InValue[]) {
 }
 
 export async function transaction<T>(callback: () => Promise<T>): Promise<T> {
+  await databaseReady;
   const tx = await db.transaction("write");
   try {
     const result = await transactionContext.run(tx, callback);

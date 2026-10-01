@@ -17,7 +17,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
           <label><span className="field-label">Phone</span><input className="field" name="phone" type="tel" autoComplete="tel" /></label>
           <label><span className="field-label">I want to</span><select className="field" name="role" defaultValue="customer"><option value="customer">Book laundry services</option><option value="cleaner">Offer laundry services</option></select></label>
           <label className="sm:col-span-2"><span className="field-label">Address</span><input className="field" name="address" autoComplete="street-address" /></label>
-          <label className="sm:col-span-2"><span className="field-label">Password</span><input className="field" name="password" type="password" minLength={8} autoComplete="new-password" required /><span className="mt-1 block text-xs text-zinc-500">At least 8 characters.</span></label>
+          <label className="sm:col-span-2"><span className="field-label">Password</span><input className="field" name="password" type="password" minLength={12} maxLength={128} autoComplete="new-password" required /><span className="mt-1 block text-xs text-zinc-500">Use at least 12 characters.</span></label>
           <button className="btn-primary sm:col-span-2" type="submit">Create account</button>
         </form>
         <p className="mt-6 text-center text-sm text-zinc-500">Already registered? <Link href="/login" className="font-bold text-brand-blue hover:underline">Sign in</Link></p>
