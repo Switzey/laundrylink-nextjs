@@ -4,6 +4,11 @@ import { DatabaseSync } from "node:sqlite";
 import { hashSync } from "bcryptjs";
 import { applySecuritySchemaToSqlite } from "./security-schema.mjs";
 
+if (process.env.TURSO_DATABASE_URL && !process.env.DATABASE_PATH) {
+  console.log("Hosted database configured; local SQLite setup skipped.");
+  process.exit(0);
+}
+
 const databasePath = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "laundrylink.sqlite");
 mkdirSync(path.dirname(databasePath), { recursive: true });
 
