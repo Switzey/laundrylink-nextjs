@@ -10,7 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 export const metadata: Metadata = { title: "Customer dashboard" };
 
 export default async function CustomerDashboard() {
-  const user = await requireUser("CUSTOMER");
+  const user = await requireUser("CUSTOMER", { returnTo: "/customer/dashboard" });
   const orders = await all<OrderSummary>(`SELECT o.*, c.business_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id WHERE o.customer_id = ? ORDER BY o.created_at DESC`, user.id);
   const active = orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length;
   const completed = orders.filter((order) => order.status === "completed").length;

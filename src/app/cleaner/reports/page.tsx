@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Cleaner reports" };
 type MonthRow = { month: string; orders: number; revenue: number };
 
 export default async function CleanerReportsPage() {
-  const user = await requireUser(VENDOR_MANAGEMENT_ROLES);
+  const user = await requireUser(VENDOR_MANAGEMENT_ROLES, { returnTo: "/cleaner/reports" });
   const cleanerId = await cleanerIdForUser(user.id);
   const stats = cleanerId ? await one<{ orders: number; completed: number; revenue: number; average_order: number }>(`SELECT COUNT(1) AS orders, SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed, COALESCE(SUM(CASE WHEN status='completed' THEN subtotal ELSE 0 END),0) AS revenue, COALESCE(AVG(subtotal),0) AS average_order FROM orders WHERE cleaner_id = ?`, cleanerId) : null;
   const months = cleanerId ? await all<MonthRow>(`SELECT substr(created_at,1,7) AS month, COUNT(1) AS orders, COALESCE(SUM(CASE WHEN status='completed' THEN subtotal ELSE 0 END),0) AS revenue FROM orders WHERE cleaner_id = ? GROUP BY substr(created_at,1,7) ORDER BY month DESC LIMIT 12`, cleanerId) : [];

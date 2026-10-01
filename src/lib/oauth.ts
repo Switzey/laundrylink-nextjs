@@ -5,10 +5,12 @@ import { hash } from "bcryptjs";
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 import { NextRequest, NextResponse } from "next/server";
 import { writeAuditLog } from "@/lib/audit";
-import { createSessionOnResponse } from "@/lib/auth";
+import { createSessionOnResponse, destinationForUser, normalizeRole } from "@/lib/auth";
+import { authPath, sanitizeReturnTo } from "@/lib/auth-intent";
 import { now, one, run, transaction } from "@/lib/db";
 import { appConfig, oauthProviderConfigured } from "@/lib/env";
 import { logError, logWarning } from "@/lib/logger";
+import type { User } from "@/lib/types";
 
 export type OAuthProvider = "google" | "apple";
 
@@ -23,10 +25,6 @@ function safeEqual(left: string, right: string) {
   const a = Buffer.from(left);
   const b = Buffer.from(right);
   return a.length === b.length && timingSafeEqual(a, b);
-}
-
-function safeReturnTo(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
 }
 
 function cookieName(provider: OAuthProvider, value: "state" | "verifier" | "nonce" | "return") {
@@ -56,8 +54,11 @@ function providerCredentials(provider: OAuthProvider) {
 }
 
 export function startOAuth(provider: OAuthProvider, request: NextRequest) {
+  const returnTo = sanitizeReturnTo(request.nextUrl.searchParams.get("returnTo"));
   if (!oauthProviderConfigured(provider)) {
-    return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(`${provider === "google" ? "Google" : "Apple"} sign-in is temporarily unavailable.`)}`, request.url));
+    return NextResponse.redirect(new URL(authPath("/login", returnTo, {
+      error: `${provider === "google" ? "Google" : "Apple"} sign-in is temporarily unavailable.`,
+    }), request.url));
   }
 
   const state = randomValue();
@@ -89,7 +90,7 @@ export function startOAuth(provider: OAuthProvider, request: NextRequest) {
   response.cookies.set(cookieName(provider, "state"), state, options);
   response.cookies.set(cookieName(provider, "verifier"), verifier, options);
   response.cookies.set(cookieName(provider, "nonce"), nonce, options);
-  response.cookies.set(cookieName(provider, "return"), safeReturnTo(request.nextUrl.searchParams.get("returnTo")), options);
+  response.cookies.set(cookieName(provider, "return"), returnTo ?? "", options);
   return response;
 }
 
@@ -120,8 +121,9 @@ function clearTemporaryCookies(provider: OAuthProvider, response: NextResponse) 
 }
 
 function callbackFailure(provider: OAuthProvider, request: NextRequest, message: string) {
+  const returnTo = sanitizeReturnTo(request.cookies.get(cookieName(provider, "return"))?.value);
   const response = NextResponse.redirect(
-    new URL(`/login?error=${encodeURIComponent(message)}`, request.url),
+    new URL(authPath("/login", returnTo, { error: message }), request.url),
     { status: 303 },
   );
   clearTemporaryCookies(provider, response);
@@ -200,7 +202,7 @@ export async function finishOAuth(provider: OAuthProvider, request: NextRequest)
   const expectedState = request.cookies.get(cookieName(provider, "state"))?.value ?? "";
   const verifier = request.cookies.get(cookieName(provider, "verifier"))?.value ?? "";
   const nonce = request.cookies.get(cookieName(provider, "nonce"))?.value ?? "";
-  const returnTo = safeReturnTo(request.cookies.get(cookieName(provider, "return"))?.value ?? null);
+  const returnTo = sanitizeReturnTo(request.cookies.get(cookieName(provider, "return"))?.value);
 
   if (values.error) return callbackFailure(provider, request, "Sign-in was cancelled.");
   if (!values.code || !expectedState || !safeEqual(values.state, expectedState) || !verifier || !nonce) {
@@ -266,7 +268,14 @@ export async function finishOAuth(provider: OAuthProvider, request: NextRequest)
       return id;
     });
 
-    const response = NextResponse.redirect(new URL(returnTo, request.url), { status: 303 });
+    const account = await one<Omit<User, "role"> & { role: string }>(
+      `SELECT id, name, email, role, phone, address, email_verified_at, phone_verified_at
+       FROM users WHERE id = ?`,
+      userId,
+    );
+    if (!account) throw new Error("OAuth account was not found after sign-in.");
+    const user: User = { ...account, role: normalizeRole(account.role) };
+    const response = NextResponse.redirect(new URL(destinationForUser(user, returnTo), request.url), { status: 303 });
     clearTemporaryCookies(provider, response);
     await createSessionOnResponse(userId, response);
     return response;

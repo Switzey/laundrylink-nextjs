@@ -9,7 +9,7 @@ export default async function ProfilePage({
 }: {
   searchParams: Promise<{ success?: string; error?: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requireUser(undefined, { returnTo: "/profile" });
   const message = await searchParams;
 
   return (

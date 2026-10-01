@@ -51,6 +51,7 @@ export function parseFormOrRedirect<T>(
   try {
     return parseForm(schema, formData);
   } catch (error) {
-    redirect(`${path}?error=${encodeURIComponent(validationErrorMessage(error, fallback))}`);
+    const separator = path.includes("?") ? "&" : "?";
+    redirect(`${path}${separator}error=${encodeURIComponent(validationErrorMessage(error, fallback))}`);
   }
 }

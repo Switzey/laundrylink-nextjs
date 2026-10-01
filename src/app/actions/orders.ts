@@ -6,6 +6,7 @@ import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { authorizeAction } from "@/lib/authorization";
 import { cleanerIdForUser } from "@/lib/auth";
+import { pathWithParams } from "@/lib/auth-intent";
 import { DELIVERY_FEE, PLATFORM_FEE, STATUS_FLOW, TIME_WINDOWS } from "@/lib/constants";
 import { all, now, one, run, transaction } from "@/lib/db";
 import { isoDate, optionalTextField, parseFormOrRedirect, positiveId } from "@/lib/validation";
@@ -94,17 +95,20 @@ async function activity(orderId: number, userId: number | null, action: string, 
 }
 
 export async function createOrderAction(formData: FormData) {
+  const cleanerId = positiveId.safeParse(formData.get("cleaner_id"));
+  const returnTo = cleanerId.success ? `/orders/new?cleaner=${cleanerId.data}&resume=1` : "/orders/new";
   const { user, context } = await authorizeAction({
     action: "order.create",
     roles: "CUSTOMER",
     rateLimit: { limit: 10, windowSeconds: 60 },
+    returnTo,
   });
-  const input = parseFormOrRedirect(createOrderSchema, formData, "/orders/new", "Enter valid order details.");
+  const input = parseFormOrRedirect(createOrderSchema, formData, returnTo, "Enter valid order details.");
   const cleaner = await one<{ id: number; user_id: number | null; business_name: string }>(
     "SELECT id, user_id, business_name FROM cleaners WHERE id = ? AND is_approved = 1 AND is_available = 1",
     input.cleaner_id,
   );
-  if (!cleaner) redirect("/orders/new?error=Choose+an+approved+and+available+cleaner");
+  if (!cleaner) redirect(pathWithParams(returnTo, { error: "Choose an approved and available cleaner" }));
 
   const availableServices = await all<Service>(
     "SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1",
@@ -120,12 +124,12 @@ export async function createOrderAction(formData: FormData) {
     return parsed.data > 0 ? [{ service, quantity: parsed.data }] : [];
   });
   if (invalidQuantity || !selected.length) {
-    redirect(`/orders/new?cleaner=${input.cleaner_id}&error=Select+valid+service+quantities`);
+    redirect(pathWithParams(returnTo, { error: "Select valid service quantities" }));
   }
 
   const today = new Date().toISOString().slice(0, 10);
   if (input.pickup_date < today) {
-    redirect(`/orders/new?cleaner=${input.cleaner_id}&error=Pickup+date+cannot+be+in+the+past`);
+    redirect(pathWithParams(returnTo, { error: "Pickup date cannot be in the past" }));
   }
 
   const addressFor = async (id: number, fallback?: string) => {
@@ -140,7 +144,7 @@ export async function createOrderAction(formData: FormData) {
   const pickupAddress = await addressFor(input.pickup_address_id, input.pickup_address);
   const deliveryAddress = await addressFor(input.delivery_address_id, input.delivery_address);
   if (!pickupAddress || !deliveryAddress) {
-    redirect(`/orders/new?cleaner=${input.cleaner_id}&error=Add+valid+pickup+and+delivery+addresses`);
+    redirect(pathWithParams(returnTo, { error: "Add valid pickup and delivery addresses" }));
   }
 
   const subtotal = selected.reduce((sum, item) => sum + Number(item.service.price) * item.quantity, 0);

@@ -10,7 +10,7 @@ import type { Service } from "@/lib/types";
 export const metadata: Metadata = { title: "Manage services" };
 
 export default async function CleanerServicesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const user = await requireUser(VENDOR_MANAGEMENT_ROLES);
+  const user = await requireUser(VENDOR_MANAGEMENT_ROLES, { returnTo: "/cleaner/services" });
   const cleanerId = await cleanerIdForUser(user.id);
   const { error } = await searchParams;
   const services = cleanerId ? await all<Service>("SELECT * FROM services WHERE cleaner_id = ? ORDER BY is_active DESC, name", cleanerId) : [];

@@ -7,8 +7,8 @@ import { one } from "@/lib/db";
 export const metadata: Metadata = { title: "Review order" };
 
 export default async function ReviewPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser("CUSTOMER");
   const orderId = Number((await params).id);
+  const user = await requireUser("CUSTOMER", { returnTo: Number.isSafeInteger(orderId) && orderId > 0 ? `/orders/${orderId}/review` : "/customer/dashboard" });
   const order = await one<{ id: number; customer_id: number; status: string; business_name: string }>(`SELECT o.id, o.customer_id, o.status, c.business_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id WHERE o.id = ?`, orderId);
   if (!order) notFound();
   if (order.customer_id !== user.id || order.status !== "completed" || await one("SELECT id FROM reviews WHERE order_id = ?", orderId)) redirect(`/orders/${orderId}`);

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import type { NextResponse } from "next/server";
 import { all, now, one, run } from "@/lib/db";
 import { appConfig } from "@/lib/env";
+import { authPath, sanitizeReturnTo } from "@/lib/auth-intent";
 import { ROLES, roleRequiresPhoneVerification, type Role, type User } from "@/lib/types";
 
 function hashToken(token: string) {
@@ -90,21 +91,23 @@ export async function getCurrentUser(): Promise<User | null> {
 
 export async function requireUser(
   roles?: Role | Role[],
-  options: { allowUnverified?: boolean } = {},
+  options: { allowUnverified?: boolean; returnTo?: string } = {},
 ): Promise<User> {
   const cookieStore = await cookies();
   const hadSessionCookie = Boolean(cookieStore.get(appConfig.sessionCookieName)?.value);
   const user = await getCurrentUser();
   if (!user) {
-    redirect(hadSessionCookie
-      ? "/login?error=Your+session+expired.+Please+sign+in+again."
-      : "/login?error=Please+sign+in+to+continue");
+    redirect(authPath("/login", options.returnTo, {
+      error: hadSessionCookie
+        ? "Your session expired. Please sign in again."
+        : "Please sign in to continue",
+    }));
   }
   const allowedRoles = roles ? (Array.isArray(roles) ? roles : [roles]) : null;
   if (allowedRoles && !allowedRoles.includes(user.role)) redirect("/dashboard");
-  if (!options.allowUnverified && !user.email_verified_at) redirect("/verify-email");
+  if (!options.allowUnverified && !user.email_verified_at) redirect(authPath("/verify-email", options.returnTo));
   if (!options.allowUnverified && roleRequiresPhoneVerification(user.role) && !user.phone_verified_at) {
-    redirect("/verify-phone");
+    redirect(authPath("/verify-phone", options.returnTo));
   }
   return user;
 }
@@ -128,10 +131,13 @@ export function dashboardForRole(role: Role) {
   return "/customer/dashboard";
 }
 
-export function destinationForUser(user: User) {
-  if (!user.email_verified_at) return "/verify-email";
-  if (roleRequiresPhoneVerification(user.role) && !user.phone_verified_at) return "/verify-phone";
-  return dashboardForRole(user.role);
+export function destinationForUser(user: User, returnTo?: unknown) {
+  const intendedPath = sanitizeReturnTo(returnTo);
+  if (!user.email_verified_at) return authPath("/verify-email", intendedPath);
+  if (roleRequiresPhoneVerification(user.role) && !user.phone_verified_at) {
+    return authPath("/verify-phone", intendedPath);
+  }
+  return intendedPath ?? dashboardForRole(user.role);
 }
 
 export async function getAllAdmins() {

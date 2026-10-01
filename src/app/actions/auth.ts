@@ -8,6 +8,7 @@ import { sendAuthEmail } from "@/lib/auth-email";
 import { createAuthToken, findValidAuthToken } from "@/lib/auth-tokens";
 import { authorizeAction, authorizePublicAction } from "@/lib/authorization";
 import { createSession, destinationForUser, destroySession, normalizeRole } from "@/lib/auth";
+import { authPath, pathWithParams, sanitizeReturnTo } from "@/lib/auth-intent";
 import { now, one, run, transaction } from "@/lib/db";
 import { appConfig, emailDeliveryConfigured, phoneVerificationConfigured } from "@/lib/env";
 import { checkPhoneVerification, isE164Phone, sendPhoneVerification } from "@/lib/phone-verification";
@@ -49,7 +50,7 @@ const phoneSchema = z.object({
 const phoneCodeSchema = z.object({ code: z.string().trim().regex(/^\d{4,10}$/, "Enter the verification code.") });
 
 function fail(path: string, message: string): never {
-  redirect(`${path}?error=${encodeURIComponent(message)}`);
+  redirect(pathWithParams(path, { error: message }));
 }
 
 async function authorizeAuthenticationAttempt(action: string, subject: string, path: string, limit: number, windowSeconds: number) {
@@ -62,8 +63,10 @@ async function authorizeAuthenticationAttempt(action: string, subject: string, p
 }
 
 export async function loginAction(formData: FormData) {
-  const { email, password } = parseFormOrRedirect(loginSchema, formData, "/login", "Enter a valid email and password.");
-  const context = await authorizeAuthenticationAttempt("auth.login", email, "/login", 5, 60);
+  const returnTo = sanitizeReturnTo(formData.get("returnTo"));
+  const loginPath = authPath("/login", returnTo);
+  const { email, password } = parseFormOrRedirect(loginSchema, formData, loginPath, "Enter a valid email and password.");
+  const context = await authorizeAuthenticationAttempt("auth.login", email, loginPath, 5, 60);
   const account = await one<Omit<User, "role"> & { role: string; password: string }>(
     `SELECT id, name, email, role, phone, address, email_verified_at, phone_verified_at, password
      FROM users WHERE lower(email) = ?`,
@@ -72,17 +75,17 @@ export async function loginAction(formData: FormData) {
   const passwordMatches = await compare(password, account?.password ?? INVALID_PASSWORD_HASH);
   if (!account || !passwordMatches) {
     await writeAuditLog({ action: "auth.login", outcome: "failed", metadata: { reason: "invalid_credentials" }, context });
-    fail("/login", "The email or password is incorrect.");
+    fail(loginPath, "The email or password is incorrect.");
   }
 
   const user: User = { ...account, role: normalizeRole(account.role) };
   if (!user.email_verified_at) {
     if (emailDeliveryConfigured()) {
       const token = await createAuthToken(user.id, "email_verification", 24 * 60);
-      await sendAuthEmail("verify", user, token);
+      await sendAuthEmail("verify", user, token, returnTo);
     }
     await writeAuditLog({ actorUserId: user.id, action: "auth.login", outcome: "denied", metadata: { reason: "email_unverified" }, context });
-    redirect("/verify-email?notice=Verify+your+email+before+signing+in.");
+    redirect(authPath("/verify-email", returnTo, { notice: "Verify your email before signing in." }));
   }
 
   if (getRounds(account.password) < appConfig.bcryptCost) {
@@ -90,19 +93,21 @@ export async function loginAction(formData: FormData) {
   }
   await createSession(user.id);
   await writeAuditLog({ actorUserId: user.id, action: "auth.login", outcome: "succeeded", context });
-  redirect(destinationForUser(user));
+  redirect(destinationForUser(user, returnTo));
 }
 
 export async function registerAction(formData: FormData) {
-  const input = parseFormOrRedirect(registerSchema, formData, "/register", "Enter valid account details and a password of at least 12 characters.");
-  if (!emailDeliveryConfigured()) fail("/register", "Email registration is temporarily unavailable. Try Google or Apple sign-in.");
+  const returnTo = sanitizeReturnTo(formData.get("returnTo"));
+  const registerPath = authPath("/register", returnTo);
+  const input = parseFormOrRedirect(registerSchema, formData, registerPath, "Enter valid account details and a password of at least 12 characters.");
+  if (!emailDeliveryConfigured()) fail(registerPath, "Email registration is temporarily unavailable. Try Google or Apple sign-in.");
   if (input.role === "VENDOR_OWNER" && !phoneVerificationConfigured()) {
-    fail("/register", "Vendor registration is temporarily unavailable while phone verification is offline.");
+    fail(registerPath, "Vendor registration is temporarily unavailable while phone verification is offline.");
   }
-  const context = await authorizeAuthenticationAttempt("auth.register", input.email, "/register", 3, 3600);
+  const context = await authorizeAuthenticationAttempt("auth.register", input.email, registerPath, 3, 3600);
   if (await one("SELECT id FROM users WHERE lower(email) = ?", input.email)) {
     await writeAuditLog({ action: "auth.register", outcome: "failed", metadata: { reason: "email_exists" }, context });
-    fail("/register", "An account already exists for that email.");
+    fail(registerPath, "An account already exists for that email.");
   }
 
   const passwordHash = await hash(input.password, appConfig.bcryptCost);
@@ -132,80 +137,93 @@ export async function registerAction(formData: FormData) {
   });
 
   const token = await createAuthToken(userId, "email_verification", 24 * 60);
-  const delivered = await sendAuthEmail("verify", { email: input.email, name: input.name }, token);
-  redirect(delivered ? "/verify-email?sent=1" : "/verify-email?error=Your+account+was+created,+but+the+verification+email+could+not+be+sent.+Please+try+again.");
+  const delivered = await sendAuthEmail("verify", { email: input.email, name: input.name }, token, returnTo);
+  redirect(authPath("/verify-email", returnTo, delivered
+    ? { sent: "1" }
+    : { error: "Your account was created, but the verification email could not be sent. Please try again." }));
 }
 
 export async function forgotPasswordAction(formData: FormData) {
-  const { email } = parseFormOrRedirect(emailSchema, formData, "/forgot-password", "Enter a valid email address.");
-  const context = await authorizeAuthenticationAttempt("auth.password_forgot", email, "/forgot-password", 3, 900);
+  const returnTo = sanitizeReturnTo(formData.get("returnTo"));
+  const forgotPath = authPath("/forgot-password", returnTo);
+  const { email } = parseFormOrRedirect(emailSchema, formData, forgotPath, "Enter a valid email address.");
+  const context = await authorizeAuthenticationAttempt("auth.password_forgot", email, forgotPath, 3, 900);
   const user = await one<{ id: number; name: string; email: string }>("SELECT id, name, email FROM users WHERE lower(email) = ?", email);
   if (user && emailDeliveryConfigured()) {
     const token = await createAuthToken(user.id, "password_reset", 30);
-    const delivered = await sendAuthEmail("reset", user, token);
+    const delivered = await sendAuthEmail("reset", user, token, returnTo);
     await writeAuditLog({ actorUserId: user.id, action: "auth.password_reset_requested", outcome: delivered ? "succeeded" : "failed", context });
   }
-  redirect("/forgot-password?sent=1");
+  redirect(authPath("/forgot-password", returnTo, { sent: "1" }));
 }
 
 export async function resetPasswordAction(formData: FormData) {
-  const input = parseFormOrRedirect(resetPasswordSchema, formData, "/reset-password", "Enter a valid new password.");
-  const context = await authorizeAuthenticationAttempt("auth.password_reset", input.token, "/reset-password", 5, 900);
+  const returnTo = sanitizeReturnTo(formData.get("returnTo"));
+  const token = typeof formData.get("token") === "string" ? String(formData.get("token")) : null;
+  const resetPath = pathWithParams(authPath("/reset-password", returnTo), { token });
+  const input = parseFormOrRedirect(resetPasswordSchema, formData, resetPath, "Enter a valid new password.");
+  const context = await authorizeAuthenticationAttempt("auth.password_reset", input.token, resetPath, 5, 900);
   const record = await findValidAuthToken(input.token, "password_reset");
-  if (!record) fail("/reset-password", "This reset link is invalid or expired.");
+  if (!record) fail(resetPath, "This reset link is invalid or expired.");
   await transaction(async () => {
     const consumed = await run("UPDATE auth_tokens SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL", now(), record.id);
-    if (!consumed.changes) fail("/reset-password", "This reset link was already used.");
+    if (!consumed.changes) fail(resetPath, "This reset link was already used.");
     await run("UPDATE users SET password = ?, updated_at = ? WHERE id = ?", await hash(input.password, appConfig.bcryptCost), now(), record.user_id);
     await run("DELETE FROM js_sessions WHERE user_id = ?", record.user_id);
     await writeAuditLog({ actorUserId: record.user_id, action: "auth.password_reset", targetType: "user", targetId: record.user_id, outcome: "succeeded", context });
   });
-  redirect("/login?success=Password+reset.+Sign+in+with+your+new+password.");
+  redirect(authPath("/login", returnTo, { success: "Password reset. Sign in with your new password." }));
 }
 
 export async function resendVerificationAction(formData: FormData) {
-  const { email } = parseFormOrRedirect(emailSchema, formData, "/verify-email", "Enter a valid email address.");
-  const context = await authorizeAuthenticationAttempt("auth.email_resend", email, "/verify-email", 3, 900);
+  const returnTo = sanitizeReturnTo(formData.get("returnTo"));
+  const verificationPath = authPath("/verify-email", returnTo);
+  const { email } = parseFormOrRedirect(emailSchema, formData, verificationPath, "Enter a valid email address.");
+  const context = await authorizeAuthenticationAttempt("auth.email_resend", email, verificationPath, 3, 900);
   const user = await one<{ id: number; name: string; email: string; email_verified_at: string | null }>(
     "SELECT id, name, email, email_verified_at FROM users WHERE lower(email) = ?", email,
   );
   if (user && !user.email_verified_at && emailDeliveryConfigured()) {
     const token = await createAuthToken(user.id, "email_verification", 24 * 60);
-    const delivered = await sendAuthEmail("verify", user, token);
+    const delivered = await sendAuthEmail("verify", user, token, returnTo);
     await writeAuditLog({ actorUserId: user.id, action: "auth.email_resend", outcome: delivered ? "succeeded" : "failed", context });
   }
-  redirect("/verify-email?sent=1");
+  redirect(authPath("/verify-email", returnTo, { sent: "1" }));
 }
 
 export async function sendPhoneVerificationAction(formData: FormData) {
-  const { user, context } = await authorizeAction({ action: "auth.phone_send", rateLimit: { limit: 3, windowSeconds: 900 }, allowUnverified: true });
-  if (!user.email_verified_at) redirect("/verify-email");
-  if (!roleRequiresPhoneVerification(user.role)) redirect("/dashboard");
-  if (!phoneVerificationConfigured()) fail("/verify-phone", "Phone verification is temporarily unavailable.");
-  const { phone } = parseFormOrRedirect(phoneSchema, formData, "/verify-phone", "Enter a valid international phone number.");
+  const returnTo = sanitizeReturnTo(formData.get("returnTo"));
+  const phonePath = authPath("/verify-phone", returnTo);
+  const { user, context } = await authorizeAction({ action: "auth.phone_send", rateLimit: { limit: 3, windowSeconds: 900 }, allowUnverified: true, returnTo: returnTo ?? undefined });
+  if (!user.email_verified_at) redirect(authPath("/verify-email", returnTo));
+  if (!roleRequiresPhoneVerification(user.role)) redirect(destinationForUser(user, returnTo));
+  if (!phoneVerificationConfigured()) fail(phonePath, "Phone verification is temporarily unavailable.");
+  const { phone } = parseFormOrRedirect(phoneSchema, formData, phonePath, "Enter a valid international phone number.");
   const delivered = await sendPhoneVerification(phone);
   if (!delivered) {
     await writeAuditLog({ actorUserId: user.id, action: "auth.phone_send", outcome: "failed", context });
-    fail("/verify-phone", "We could not send a code to that number. Check it and try again.");
+    fail(phonePath, "We could not send a code to that number. Check it and try again.");
   }
   await run("UPDATE users SET phone = ?, phone_verified_at = NULL, updated_at = ? WHERE id = ?", phone, now(), user.id);
   await writeAuditLog({ actorUserId: user.id, action: "auth.phone_send", outcome: "succeeded", context });
-  redirect("/verify-phone?sent=1");
+  redirect(authPath("/verify-phone", returnTo, { sent: "1" }));
 }
 
 export async function verifyPhoneAction(formData: FormData) {
-  const { user, context } = await authorizeAction({ action: "auth.phone_verify", rateLimit: { limit: 5, windowSeconds: 900 }, allowUnverified: true });
-  if (!user.email_verified_at) redirect("/verify-email");
-  if (!roleRequiresPhoneVerification(user.role)) redirect("/dashboard");
-  if (!user.phone || !isE164Phone(user.phone)) fail("/verify-phone", "Send a code to a valid phone number first.");
-  const { code } = parseFormOrRedirect(phoneCodeSchema, formData, "/verify-phone", "Enter the verification code.");
+  const returnTo = sanitizeReturnTo(formData.get("returnTo"));
+  const phonePath = authPath("/verify-phone", returnTo);
+  const { user, context } = await authorizeAction({ action: "auth.phone_verify", rateLimit: { limit: 5, windowSeconds: 900 }, allowUnverified: true, returnTo: returnTo ?? undefined });
+  if (!user.email_verified_at) redirect(authPath("/verify-email", returnTo));
+  if (!roleRequiresPhoneVerification(user.role)) redirect(destinationForUser(user, returnTo));
+  if (!user.phone || !isE164Phone(user.phone)) fail(phonePath, "Send a code to a valid phone number first.");
+  const { code } = parseFormOrRedirect(phoneCodeSchema, formData, phonePath, "Enter the verification code.");
   if (!await checkPhoneVerification(user.phone, code)) {
     await writeAuditLog({ actorUserId: user.id, action: "auth.phone_verify", outcome: "failed", context });
-    fail("/verify-phone", "That code is incorrect or expired.");
+    fail(phonePath, "That code is incorrect or expired.");
   }
   await run("UPDATE users SET phone_verified_at = ?, updated_at = ? WHERE id = ?", now(), now(), user.id);
   await writeAuditLog({ actorUserId: user.id, action: "auth.phone_verify", outcome: "succeeded", context });
-  redirect("/dashboard?success=Phone+verified");
+  redirect(destinationForUser({ ...user, phone_verified_at: now() }, returnTo));
 }
 
 export async function logoutAction() {

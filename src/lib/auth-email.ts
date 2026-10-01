@@ -1,6 +1,7 @@
 import "server-only";
 
 import { appConfig, emailDeliveryConfigured } from "@/lib/env";
+import { authPath, pathWithParams } from "@/lib/auth-intent";
 import { logError, logWarning } from "@/lib/logger";
 
 type AuthEmailKind = "verify" | "reset";
@@ -9,6 +10,7 @@ export async function sendAuthEmail(
   kind: AuthEmailKind,
   recipient: { email: string; name: string },
   token: string,
+  returnTo?: string | null,
 ) {
   if (!emailDeliveryConfigured()) {
     logWarning("auth.email_unavailable", { kind });
@@ -16,7 +18,11 @@ export async function sendAuthEmail(
   }
 
   const path = kind === "verify" ? "/api/auth/verify-email" : "/reset-password";
-  const link = `${appConfig.origin}${path}?token=${encodeURIComponent(token)}`;
+  const callbackPath = pathWithParams(
+    kind === "verify" ? path : authPath(path, returnTo),
+    { token, ...(kind === "verify" ? { returnTo: returnTo ?? null } : {}) },
+  );
+  const link = `${appConfig.origin}${callbackPath}`;
   const subject = kind === "verify" ? "Verify your LaundryLink email" : "Reset your LaundryLink password";
   const intro = kind === "verify"
     ? "Confirm your email address to finish setting up your LaundryLink account."

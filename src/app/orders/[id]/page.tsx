@@ -17,8 +17,8 @@ type Activity = { id: number; action: string; description: string; created_at: s
 type Review = { rating: number; comment: string | null; customer_name: string | null };
 
 export default async function OrderPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ success?: string; error?: string }> }) {
-  const user = await requireUser();
   const orderId = Number((await params).id);
+  const user = await requireUser(undefined, { returnTo: Number.isSafeInteger(orderId) && orderId > 0 ? `/orders/${orderId}` : "/dashboard" });
   const message = await searchParams;
   const order = await one<OrderDetail>(`SELECT o.*, c.business_name, c.user_id AS cleaner_user_id, u.name AS customer_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id LEFT JOIN users u ON u.id = o.customer_id WHERE o.id = ?`, orderId);
   if (!order) notFound();

@@ -5,6 +5,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
 import { enforceRateLimit, type RateLimitRule } from "@/lib/rate-limit";
 import { assertTrustedMutation, opaqueIdentifier } from "@/lib/request-security";
+import { authPath } from "@/lib/auth-intent";
 import { roleRequiresPhoneVerification, type Role, type User } from "@/lib/types";
 
 const DEFAULT_ACTION_LIMIT = { limit: 60, windowSeconds: 60 } satisfies RateLimitRule;
@@ -14,6 +15,7 @@ type ProtectedActionOptions = {
   roles?: Role | Role[];
   rateLimit?: RateLimitRule;
   allowUnverified?: boolean;
+  returnTo?: string;
 };
 
 export async function authorizeAction(options: ProtectedActionOptions) {
@@ -22,7 +24,7 @@ export async function authorizeAction(options: ProtectedActionOptions) {
 
   if (!user) {
     await writeAuditLog({ action: options.action, outcome: "denied", context });
-    redirect("/login?error=Please+sign+in+to+continue");
+    redirect(authPath("/login", options.returnTo, { error: "Please sign in to continue" }));
   }
 
   const roles = options.roles
@@ -39,9 +41,9 @@ export async function authorizeAction(options: ProtectedActionOptions) {
     redirect("/dashboard");
   }
 
-  if (!options.allowUnverified && !user.email_verified_at) redirect("/verify-email");
+  if (!options.allowUnverified && !user.email_verified_at) redirect(authPath("/verify-email", options.returnTo));
   if (!options.allowUnverified && roleRequiresPhoneVerification(user.role) && !user.phone_verified_at) {
-    redirect("/verify-phone");
+    redirect(authPath("/verify-phone", options.returnTo));
   }
 
   await enforceRateLimit(options.action, `user:${user.id}`, options.rateLimit ?? DEFAULT_ACTION_LIMIT, context);

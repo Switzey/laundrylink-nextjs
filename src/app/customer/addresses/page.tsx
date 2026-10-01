@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Saved addresses" };
 type Address = { id: number; label: string | null; address: string; city: string; phone: string | null; is_default: number; delivery_notes: string | null };
 
 export default async function AddressesPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const user = await requireUser("CUSTOMER");
+  const user = await requireUser("CUSTOMER", { returnTo: "/customer/addresses" });
   const { error } = await searchParams;
   const addresses = await all<Address>("SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, label", user.id);
   return (

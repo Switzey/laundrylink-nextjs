@@ -12,7 +12,7 @@ import type { OrderSummary } from "@/lib/types";
 export const metadata: Metadata = { title: "Logistics" };
 
 export default async function LogisticsPage({ searchParams }: { searchParams: Promise<{ status?: string; q?: string }> }) {
-  await requireUser(LOGISTICS_ROLES);
+  await requireUser(LOGISTICS_ROLES, { returnTo: "/admin/logistics" });
   const { status: requestedStatus = "active", q } = await searchParams;
   const allowedStatuses = ["active", "all", "pending", "accepted", "picked_up", "in_cleaning", "ready", "out_for_delivery", "completed", "cancelled"];
   const status = allowedStatuses.includes(requestedStatus) ? requestedStatus : "active";

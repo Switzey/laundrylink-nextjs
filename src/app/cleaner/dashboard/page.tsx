@@ -11,7 +11,7 @@ import type { Cleaner, OrderSummary } from "@/lib/types";
 export const metadata: Metadata = { title: "Cleaner dashboard" };
 
 export default async function CleanerDashboard() {
-  const user = await requireUser(VENDOR_ROLES);
+  const user = await requireUser(VENDOR_ROLES, { returnTo: "/cleaner/dashboard" });
   const cleanerId = await cleanerIdForUser(user.id);
   const cleaner = cleanerId ? await one<Cleaner>("SELECT * FROM cleaners WHERE id = ?", cleanerId) : null;
   if (!cleaner) return <div className="page"><div className="surface empty">Your cleaner profile is not ready yet.</div></div>;
