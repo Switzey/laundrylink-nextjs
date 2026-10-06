@@ -3,6 +3,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { hashSync } from "bcryptjs";
 import { applyAuthSchemaToSqlite } from "./auth-schema.mjs";
+import { applyOnboardingSchemaToSqlite } from "./onboarding-schema.mjs";
 import { applySecuritySchemaToSqlite } from "./security-schema.mjs";
 
 if (process.env.TURSO_DATABASE_URL && !process.env.DATABASE_PATH) {
@@ -189,6 +190,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS activities_order_created_index ON order_activities(order_id, created_at);
 `);
 applyAuthSchemaToSqlite(db);
+applyOnboardingSchemaToSqlite(db);
 applySecuritySchemaToSqlite(db);
 
 const existingUsers = db.prepare("SELECT COUNT(1) AS count FROM users").get().count;

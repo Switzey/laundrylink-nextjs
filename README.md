@@ -30,7 +30,7 @@ Use isolated credentials and databases for each environment:
 | Vercel Preview | `staging` | Dedicated staging Turso DB | QA and acceptance |
 | Vercel Production | `production` | Dedicated production Turso DB | Live customer data |
 
-Required hosted variables are `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, and `AUDIT_LOG_SALT`. Set `APP_ORIGIN` to the canonical HTTPS origin. Vercel supplies deployment URL variables automatically; use `TRUSTED_ORIGINS` only for additional trusted reverse-proxy origins.
+Required hosted variables are `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `AUDIT_LOG_SALT`, and `PAYOUT_ENCRYPTION_KEY`. The payout key must be a base64-encoded 32-byte secret and must remain stable so encrypted identity and bank data can be decrypted during review. Set `APP_ORIGIN` to the canonical HTTPS origin. Vercel supplies deployment URL variables automatically; use `TRUSTED_ORIGINS` only for additional trusted reverse-proxy origins.
 
 Authentication integrations are optional but must be configured before their flows become available:
 
@@ -43,11 +43,11 @@ Authentication integrations are optional but must be configured before their flo
 
 Never commit provider credentials. Configure separate values for preview and production deployments. Email registration is closed when email delivery is unavailable, and vendor registration is also closed when phone verification is unavailable, so accounts cannot be created in an unverifiable state.
 
-Run the idempotent schema migration against each hosted database before deploying:
+Run the idempotent onboarding migration against each hosted database before deploying. It applies the onboarding schema first and then refreshes the security constraints:
 
 ```bash
-node --env-file=.env.staging.local scripts/migrate-security.mjs
-node --env-file=.env.production.local scripts/migrate-security.mjs
+node --env-file=.env.staging.local scripts/migrate-onboarding.mjs
+node --env-file=.env.production.local scripts/migrate-onboarding.mjs
 ```
 
 An empty Turso database can be initialized with `npm run db:setup:turso`. The seeder creates sanitized demo data and refuses a custom seed containing users outside its explicit demo allowlist.
@@ -63,7 +63,8 @@ Rotate an account password from a trusted terminal by supplying `USER_EMAIL` and
 - Roles are `CUSTOMER`, `VENDOR_OWNER`, `VENDOR_MANAGER`, `VENDOR_STAFF`, `RIDER`, `SUPPORT_AGENT`, `ADMIN`, and `SUPER_ADMIN`. Protected pages and every mutation enforce role permissions on the server.
 - Server Actions enforce trusted origins, bounded request bodies, Zod input schemas, and persistent database-backed rate limits.
 - React output escaping and a Content Security Policy protect rendered user content; no raw HTML rendering is used.
-- File uploads are not supported by the current product. Any future upload endpoint must add explicit MIME allowlists, byte-size limits, randomized storage names, and content scanning before it is enabled.
+- Vendor uploads enforce byte-size limits, declared MIME allowlists, file-signature checks, sanitized names, authorized retrieval, and content-disposition headers. Executable formats and SVG are rejected; add malware scanning before accepting broader document formats.
+- Vendor identity and bank account numbers are encrypted at rest with AES-256-GCM and are masked in owner and admin review views.
 - Database triggers, foreign keys, unique indexes, and checks reject invalid roles, states, prices, ratings, and session records.
 - Security-sensitive mutations write structured audit records. Request failures are emitted as structured server logs without secrets or raw IP addresses.
 - User-facing error boundaries return generic recovery messages; stack traces and database errors remain server-side.
@@ -74,4 +75,4 @@ Rotate an account password from a trusted terminal by supplying `USER_EMAIL` and
 npm run check
 ```
 
-This runs TypeScript, ESLint, the dependency security audit, and a production build.
+This runs TypeScript, ESLint, the production dependency security audit, and a production build. Run `npm run security:audit:all` separately to review development-only tooling advisories.

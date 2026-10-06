@@ -38,6 +38,14 @@ if (appEnvironment !== "development" && !auditSalt) {
   throw new Error("AUDIT_LOG_SALT is required outside development.");
 }
 
+const payoutEncryptionKey = process.env.PAYOUT_ENCRYPTION_KEY?.trim() || null;
+if (appEnvironment !== "development") {
+  const decodedLength = payoutEncryptionKey ? Buffer.from(payoutEncryptionKey, "base64").length : 0;
+  if (decodedLength !== 32) {
+    throw new Error("PAYOUT_ENCRYPTION_KEY must be a base64-encoded 32-byte key outside development.");
+  }
+}
+
 export const appConfig = Object.freeze({
   environment: appEnvironment,
   isProduction: appEnvironment === "production",
@@ -45,6 +53,7 @@ export const appConfig = Object.freeze({
   origin: process.env.APP_ORIGIN?.trim().replace(/\/$/, "") || null,
   trustedOrigins: new Set(trustedOrigins),
   auditSalt: auditSalt || "laundrylink-development-only-salt",
+  payoutEncryptionKey,
   bcryptCost: integerFromEnv("BCRYPT_COST", 12, 12, 14),
   sessionDays: integerFromEnv("SESSION_DAYS", 7, 1, 30),
   sessionCookieName:

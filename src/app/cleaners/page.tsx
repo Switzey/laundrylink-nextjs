@@ -13,7 +13,9 @@ export default async function CleanersPage({ searchParams }: { searchParams: Pro
   const search = likePattern(query);
   const orderBy = sort === "name" ? "c.business_name ASC" : sort === "services" ? "services_count DESC" : "c.rating DESC";
   const cleaners = await all<Cleaner>(
-    `SELECT c.*, COUNT(DISTINCT s.id) AS services_count, COUNT(DISTINCT r.id) AS reviews_count
+    `SELECT c.*, COUNT(DISTINCT s.id) AS services_count, COUNT(DISTINCT r.id) AS reviews_count,
+       (SELECT id FROM vendor_files WHERE cleaner_id = c.id AND kind = 'logo') AS logo_file_id,
+       (SELECT id FROM vendor_files WHERE cleaner_id = c.id AND kind = 'cover') AS cover_file_id
      FROM cleaners c LEFT JOIN services s ON s.cleaner_id = c.id AND s.is_active = 1 LEFT JOIN reviews r ON r.cleaner_id = c.id
      WHERE c.is_approved = 1 AND c.is_available = 1 AND (c.business_name LIKE ? ESCAPE '\\' OR c.city LIKE ? ESCAPE '\\' OR s.name LIKE ? ESCAPE '\\')
      GROUP BY c.id ORDER BY ${orderBy}`,

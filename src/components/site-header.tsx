@@ -15,6 +15,7 @@ export async function SiteHeader() {
           <Link className="nav-link" href="/cleaners">Find a cleaner</Link>
           {user && <Link className="nav-link" href={dashboardForRole(user.role)}>Dashboard</Link>}
           {user?.role === "CUSTOMER" && <Link className="nav-link" href="/orders/new">Book laundry</Link>}
+          {user?.role === "VENDOR_OWNER" && <Link className="nav-link" href="/cleaner/onboarding">Onboarding</Link>}
           {user && VENDOR_MANAGEMENT_ROLES.includes(user.role) && <Link className="nav-link" href="/cleaner/services">Services</Link>}
           {user && LOGISTICS_ROLES.includes(user.role) && <Link className="nav-link" href="/admin/logistics">Logistics</Link>}
           {user && ADMIN_ROLES.includes(user.role) && <Link className="nav-link" href="/admin/reports">Reports</Link>}
@@ -35,6 +36,7 @@ export async function SiteHeader() {
             <Link className="mobile-link" href="/cleaners"><ShoppingBag size={17} />Find a cleaner</Link>
             {user ? <>
               <Link className="mobile-link" href={dashboardForRole(user.role)}><LayoutDashboard size={17} />Dashboard</Link>
+              {user.role === "VENDOR_OWNER" && <Link className="mobile-link" href="/cleaner/onboarding"><ShoppingBag size={17} />Onboarding</Link>}
               <Link className="mobile-link" href="/notifications"><Bell size={17} />Notifications</Link>
               <Link className="mobile-link" href="/profile"><UserRound size={17} />Profile</Link>
               <form action={logoutAction}><button className="mobile-link w-full" type="submit">Sign out</button></form>

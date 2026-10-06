@@ -12,9 +12,12 @@ import { VENDOR_MANAGEMENT_ROLES } from "@/lib/types";
 
 const serviceSchema = z.object({
   name: textField(2, 120),
+  category: textField(2, 80),
   description: optionalTextField(500),
   price: boundedMoney,
-  unit: z.enum(["per_item", "per_kg", "flat_rate"]),
+  unit: z.enum(["per_item", "per_kg", "per_pair", "per_set", "flat_rate"]),
+  turnaround_time: textField(2, 100),
+  express_available: z.string().optional().transform((value) => value === "on"),
 });
 const serviceIdSchema = z.object({ service_id: positiveId });
 const cleanerProfileSchema = z.object({
@@ -32,17 +35,21 @@ export async function addServiceAction(formData: FormData) {
   const { user, context } = await authorizeAction({ action: "cleaner.service_create", roles: VENDOR_MANAGEMENT_ROLES });
   const cleanerId = await cleanerIdForUser(user.id);
   if (!cleanerId) redirect("/cleaner/services?error=Cleaner+profile+not+found");
+  if (!await one("SELECT id FROM cleaners WHERE id = ? AND verification_status = 'approved'", cleanerId)) redirect("/cleaner/onboarding");
   const input = parseFormOrRedirect(serviceSchema, formData, "/cleaner/services", "Enter valid service details.");
   await transaction(async () => {
     const result = await run(
       `INSERT INTO services
-        (cleaner_id, name, description, price, unit, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+        (cleaner_id, name, category, description, price, unit, turnaround_time, express_available, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       cleanerId,
       input.name,
+      input.category,
       input.description ?? null,
       input.price,
       input.unit,
+      input.turnaround_time,
+      input.express_available ? 1 : 0,
       now(),
       now(),
     );
@@ -62,6 +69,7 @@ export async function toggleServiceAction(formData: FormData) {
   const { user, context } = await authorizeAction({ action: "cleaner.service_toggle", roles: VENDOR_MANAGEMENT_ROLES });
   const cleanerId = await cleanerIdForUser(user.id);
   if (!cleanerId) redirect("/cleaner/services?error=Cleaner+profile+not+found");
+  if (!await one("SELECT id FROM cleaners WHERE id = ? AND verification_status = 'approved'", cleanerId)) redirect("/cleaner/onboarding");
   const { service_id: serviceId } = parseFormOrRedirect(serviceIdSchema, formData, "/cleaner/services", "Choose a valid service.");
   const result = await run(
     `UPDATE services
@@ -81,6 +89,7 @@ export async function deleteServiceAction(formData: FormData) {
   const { user, context } = await authorizeAction({ action: "cleaner.service_delete", roles: VENDOR_MANAGEMENT_ROLES });
   const cleanerId = await cleanerIdForUser(user.id);
   if (!cleanerId) redirect("/cleaner/services?error=Cleaner+profile+not+found");
+  if (!await one("SELECT id FROM cleaners WHERE id = ? AND verification_status = 'approved'", cleanerId)) redirect("/cleaner/onboarding");
   const { service_id: serviceId } = parseFormOrRedirect(serviceIdSchema, formData, "/cleaner/services", "Choose a valid service.");
   const service = await one<{ id: number }>("SELECT id FROM services WHERE id = ? AND cleaner_id = ?", serviceId, cleanerId);
   if (!service) return;
@@ -99,6 +108,7 @@ export async function updateCleanerProfileAction(formData: FormData) {
   });
   const cleanerId = await cleanerIdForUser(user.id);
   if (!cleanerId) redirect("/cleaner/profile?error=Cleaner+profile+not+found");
+  if (!await one("SELECT id FROM cleaners WHERE id = ? AND verification_status = 'approved'", cleanerId)) redirect("/cleaner/onboarding");
   const input = parseFormOrRedirect(cleanerProfileSchema, formData, "/cleaner/profile", "Enter valid business details.");
   await transaction(async () => {
     await run(

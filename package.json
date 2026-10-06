@@ -6,6 +6,7 @@
     "db:setup": "node scripts/setup-database.mjs",
     "db:setup:turso": "node scripts/setup-turso.mjs",
     "db:migrate:security": "node scripts/migrate-security.mjs",
+    "db:migrate:onboarding": "node scripts/migrate-onboarding.mjs",
     "user:set-password": "node scripts/set-user-password.mjs",
     "predev": "node scripts/setup-database.mjs",
     "dev": "next dev",
@@ -15,7 +16,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "security:audit": "npm audit --audit-level=moderate",
+    "security:audit": "npm audit --omit=dev --audit-level=moderate",
+    "security:audit:all": "npm audit --audit-level=moderate",
     "check": "npm run typecheck && npm run lint && npm run security:audit && npm run build"
   },
   "dependencies": {

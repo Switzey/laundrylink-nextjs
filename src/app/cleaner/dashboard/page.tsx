@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { ArrowRight, BriefcaseBusiness, CalendarDays, CircleDollarSign, Settings2 } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { cleanerIdForUser, requireUser } from "@/lib/auth";
@@ -15,6 +16,7 @@ export default async function CleanerDashboard() {
   const cleanerId = await cleanerIdForUser(user.id);
   const cleaner = cleanerId ? await one<Cleaner>("SELECT * FROM cleaners WHERE id = ?", cleanerId) : null;
   if (!cleaner) return <div className="page"><div className="surface empty">Your cleaner profile is not ready yet.</div></div>;
+  if (user.role === "VENDOR_OWNER" && cleaner.verification_status !== "approved") redirect("/cleaner/onboarding");
   const orders = await all<OrderSummary>(`SELECT o.*, c.business_name, u.name AS customer_name FROM orders o JOIN cleaners c ON c.id = o.cleaner_id LEFT JOIN users u ON u.id = o.customer_id WHERE o.cleaner_id = ? ORDER BY o.created_at DESC`, cleaner.id);
   const active = orders.filter((order) => !["completed", "cancelled"].includes(order.status)).length;
   const completed = orders.filter((order) => order.status === "completed").length;

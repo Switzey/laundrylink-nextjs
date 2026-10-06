@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { authorizeAction } from "@/lib/authorization";
@@ -23,14 +24,21 @@ export async function setCleanerApprovalAction(formData: FormData) {
   const input = parseFormOrRedirect(approvalSchema, formData, "/admin/dashboard", "Choose a valid cleaner.");
 
   await transaction(async () => {
-    const cleaner = await one<{ user_id: number | null; business_name: string }>(
-      "SELECT user_id, business_name FROM cleaners WHERE id = ?",
+    const cleaner = await one<{ user_id: number | null; business_name: string; verification_status: string }>(
+      "SELECT user_id, business_name, verification_status FROM cleaners WHERE id = ?",
       input.cleaner_id,
     );
     if (!cleaner) return;
+    if (input.approved && cleaner.verification_status !== "pending") {
+      redirect("/admin/dashboard?error=Only+submitted+vendor+applications+can+be+approved");
+    }
     await run(
-      "UPDATE cleaners SET is_approved = ?, updated_at = ? WHERE id = ?",
+      `UPDATE cleaners SET is_approved = ?, is_available = ?, verification_status = ?,
+       approved_at = ?, updated_at = ? WHERE id = ?`,
       input.approved ? 1 : 0,
+      input.approved ? 1 : 0,
+      input.approved ? "approved" : "needs_changes",
+      input.approved ? now() : null,
       now(),
       input.cleaner_id,
     );
@@ -60,6 +68,7 @@ export async function setCleanerApprovalAction(formData: FormData) {
     });
   });
   revalidatePath("/admin/dashboard");
+  revalidatePath(`/admin/cleaners/${input.cleaner_id}`);
   revalidatePath("/cleaners");
 }
 
