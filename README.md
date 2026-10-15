@@ -41,7 +41,7 @@ Authentication integrations are optional but must be configured before their flo
 | Apple sign-in | `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET` | Register `${APP_ORIGIN}/api/auth/oauth/apple/callback`; the secret is Apple's signed client-secret JWT. |
 | Phone verification | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_VERIFY_SERVICE_SID` | Create a Twilio Verify service with SMS enabled. |
 
-Never commit provider credentials. Configure separate values for preview and production deployments. Email registration is closed when email delivery is unavailable, and vendor registration is also closed when phone verification is unavailable, so accounts cannot be created in an unverifiable state.
+Never commit provider credentials. Configure separate values for preview and production deployments. Email registration is closed when email delivery is unavailable unless the temporary `AUTH_BYPASS_EMAIL_VERIFICATION=true` emergency switch is explicitly enabled. That switch records bypassed verification in the audit log and automatically stops taking effect once email delivery is fully configured. Remove it as soon as Resend is available. Vendor registration remains closed when phone verification is unavailable.
 
 Run the idempotent onboarding migration against each hosted database before deploying. It applies the authentication and onboarding schemas before refreshing the security constraints:
 

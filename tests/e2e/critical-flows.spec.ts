@@ -87,6 +87,28 @@ function futureDate(days: number) {
 
 test.beforeEach(() => resetState());
 
+test("customer can register and sign in through the temporary email bypass", async ({ page }) => {
+  const email = `qa-registration-${Date.now()}@example.com`;
+  await page.goto("/register");
+  await page.getByLabel("Full name").fill("QA Registration Customer");
+  await page.getByLabel("Email").fill(email);
+  await page.locator('input[name="password"]').fill(password);
+  await page.locator('input[name="confirm_password"]').fill(password);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/login\?success=/);
+  await expect(page.getByText("Account created. You can sign in now.")).toBeVisible();
+
+  await page.getByLabel("Email").fill(email);
+  await page.locator('input[name="password"]').fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/customer\/dashboard/);
+
+  const registered = withDatabase((database) => database
+    .prepare("SELECT email_verified_at FROM users WHERE email = ?")
+    .get(email)) as { email_verified_at: string | null };
+  expect(registered.email_verified_at).toBeTruthy();
+});
+
 test("customer account login uses an HTTP-only session and logout revokes it", async ({ page, context }) => {
   await login(page, "customer@example.com", /\/customer\/dashboard/);
   await expect(page.getByRole("heading", { name: /Good to see you, Tola/i })).toBeVisible();

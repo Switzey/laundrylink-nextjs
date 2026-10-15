@@ -66,6 +66,9 @@ if (validBase64Key(value("PAYOUT_ENCRYPTION_KEY"))) {
 }
 
 configuredGroup("Authentication email", ["RESEND_API_KEY", "AUTH_EMAIL_FROM"]);
+if (value("AUTH_BYPASS_EMAIL_VERIFICATION").toLowerCase() === "true") {
+  warn("Email verification bypass is enabled. Remove it immediately after configuring authentication email.");
+}
 configuredGroup("Google sign-in", ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]);
 configuredGroup("Apple sign-in", ["APPLE_CLIENT_ID", "APPLE_CLIENT_SECRET"]);
 configuredGroup("Twilio phone verification", [

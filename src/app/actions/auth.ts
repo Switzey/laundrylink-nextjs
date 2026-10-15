@@ -10,7 +10,7 @@ import { authorizeAction, authorizePublicAction } from "@/lib/authorization";
 import { createSession, destinationForUser, destroySession, normalizeRole, userPhoneIsVerified } from "@/lib/auth";
 import { authPath, pathWithParams, sanitizeReturnTo } from "@/lib/auth-intent";
 import { now, one, run, transaction } from "@/lib/db";
-import { appConfig, emailDeliveryConfigured, phoneVerificationConfigured } from "@/lib/env";
+import { appConfig, emailDeliveryConfigured, emailVerificationBypassEnabled, phoneVerificationConfigured } from "@/lib/env";
 import { normalizePhoneNumber } from "@/lib/phone-numbers";
 import { beginPhoneVerification, completePhoneVerification } from "@/lib/phone-verification-attempts";
 import { applyAccountPhoneChange } from "@/lib/phone-state";
@@ -51,12 +51,33 @@ export async function loginAction(formData: FormData) {
 
   const user: User = { ...account, role: normalizeRole(account.role) };
   if (!user.email_verified_at) {
-    if (emailDeliveryConfigured()) {
+    if (emailVerificationBypassEnabled()) {
+      const verifiedAt = now();
+      await run(
+        "UPDATE users SET email_verified_at = ?, updated_at = ? WHERE id = ? AND email_verified_at IS NULL",
+        verifiedAt,
+        verifiedAt,
+        user.id,
+      );
+      user.email_verified_at = verifiedAt;
+      await writeAuditLog({
+        actorUserId: user.id,
+        action: "auth.email_verification_bypassed",
+        targetType: "user",
+        targetId: user.id,
+        outcome: "succeeded",
+        metadata: { reason: "temporary_provider_bypass" },
+        context,
+      });
+    } else if (emailDeliveryConfigured()) {
       const token = await createAuthToken(user.id, "email_verification", 24 * 60);
       await sendAuthEmail("verify", user, token, returnTo);
+      await writeAuditLog({ actorUserId: user.id, action: "auth.login", outcome: "denied", metadata: { reason: "email_unverified" }, context });
+      redirect(authPath("/verify-email", returnTo, { notice: "Verify your email before signing in." }));
+    } else {
+      await writeAuditLog({ actorUserId: user.id, action: "auth.login", outcome: "denied", metadata: { reason: "email_unverified" }, context });
+      redirect(authPath("/verify-email", returnTo, { notice: "Verify your email before signing in." }));
     }
-    await writeAuditLog({ actorUserId: user.id, action: "auth.login", outcome: "denied", metadata: { reason: "email_unverified" }, context });
-    redirect(authPath("/verify-email", returnTo, { notice: "Verify your email before signing in." }));
   }
 
   if (getRounds(account.password) < appConfig.bcryptCost) {
@@ -71,7 +92,10 @@ export async function registerAction(formData: FormData) {
   const returnTo = sanitizeReturnTo(formData.get("returnTo"));
   const registerPath = authPath("/register", returnTo);
   const input = parseFormOrRedirect(registerSchema, formData, registerPath, "Enter valid account details and a password of at least 12 characters.");
-  if (!emailDeliveryConfigured()) fail(registerPath, "Email registration is temporarily unavailable. Try Google or Apple sign-in.");
+  const bypassEmailVerification = emailVerificationBypassEnabled();
+  if (!emailDeliveryConfigured() && !bypassEmailVerification) {
+    fail(registerPath, "Email registration is temporarily unavailable. Try Google or Apple sign-in.");
+  }
   if (input.role === "VENDOR_OWNER" && !phoneVerificationConfigured()) {
     fail(registerPath, "Vendor registration is temporarily unavailable while phone verification is offline.");
   }
@@ -85,9 +109,10 @@ export async function registerAction(formData: FormData) {
   const userId = await transaction(async () => {
     const timestamp = now();
     const result = await run(
-      `INSERT INTO users (name, email, password, role, phone, address, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      input.name, input.email, passwordHash, input.role, input.phone ?? null, input.address ?? null, timestamp, timestamp,
+      `INSERT INTO users (name, email, email_verified_at, password, role, phone, address, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      input.name, input.email, bypassEmailVerification ? timestamp : null, passwordHash, input.role,
+      input.phone ?? null, input.address ?? null, timestamp, timestamp,
     );
     const id = Number(result.lastInsertRowid);
     if (input.role === "VENDOR_OWNER") {
@@ -103,9 +128,24 @@ export async function registerAction(formData: FormData) {
         Number(cleaner.lastInsertRowid), id, timestamp, timestamp,
       );
     }
-    await writeAuditLog({ actorUserId: id, action: "auth.register", targetType: "user", targetId: id, outcome: "succeeded", metadata: { role: input.role }, context });
+    await writeAuditLog({
+      actorUserId: id,
+      action: "auth.register",
+      targetType: "user",
+      targetId: id,
+      outcome: "succeeded",
+      metadata: {
+        role: input.role,
+        emailVerification: bypassEmailVerification ? "bypassed" : "required",
+      },
+      context,
+    });
     return id;
   });
+
+  if (bypassEmailVerification) {
+    redirect(authPath("/login", returnTo, { success: "Account created. You can sign in now." }));
+  }
 
   const token = await createAuthToken(userId, "email_verification", 24 * 60);
   const delivered = await sendAuthEmail("verify", { email: input.email, name: input.name }, token, returnTo);

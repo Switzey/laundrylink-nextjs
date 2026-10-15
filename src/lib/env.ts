@@ -1,6 +1,7 @@
 import "server-only";
 
 import { z } from "zod";
+import { emailVerificationBypassIsActive } from "@/lib/email-verification-policy";
 
 const appEnvironmentSchema = z.enum(["development", "staging", "production"]);
 
@@ -63,6 +64,8 @@ export const appConfig = Object.freeze({
   email: Object.freeze({
     resendApiKey: process.env.RESEND_API_KEY?.trim() || null,
     from: process.env.AUTH_EMAIL_FROM?.trim() || null,
+    bypassVerification:
+      process.env.AUTH_BYPASS_EMAIL_VERIFICATION?.trim().toLowerCase() === "true",
   }),
   oauth: Object.freeze({
     googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || null,
@@ -79,6 +82,13 @@ export const appConfig = Object.freeze({
 
 export function emailDeliveryConfigured() {
   return Boolean(appConfig.origin && appConfig.email.resendApiKey && appConfig.email.from);
+}
+
+export function emailVerificationBypassEnabled() {
+  return emailVerificationBypassIsActive(
+    appConfig.email.bypassVerification,
+    emailDeliveryConfigured(),
+  );
 }
 
 export function oauthProviderConfigured(provider: "google" | "apple") {

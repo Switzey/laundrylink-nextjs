@@ -17,6 +17,7 @@ const env = {
   ...process.env,
   APP_ENV: "development",
   APP_ORIGIN: origin,
+  AUTH_BYPASS_EMAIL_VERIFICATION: "true",
   DATABASE_PATH: databasePath,
   DEMO_PASSWORD: "e2e-test-password",
   TURSO_DATABASE_URL: "",
