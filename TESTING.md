@@ -43,3 +43,27 @@ npm run test:e2e:headed
 ```
 
 Playwright traces, screenshots, and video are retained only for failures and ignored by Git.
+
+## Read-only live production QA
+
+The separate live harness is hard-locked to `https://www.laundrylink.com.ng` and runs desktop Chromium plus Pixel 7 emulation. Its default mode covers public pages, navigation, responsive overflow, required-field validation, authentication guards, OAuth initiation, security headers, API error safety, cart intent preservation, and automated WCAG A/AA checks. It does not create accounts, send messages, submit orders, change profiles, approve vendors, or attempt payments.
+
+```powershell
+npm run test:e2e:live
+npm run test:e2e:live:headed
+npm run test:e2e:live:report
+```
+
+Authenticated checks require dedicated least-privilege accounts through `E2E_LIVE_CUSTOMER_*`, `E2E_LIVE_VENDOR_*`, and `E2E_LIVE_ADMIN_*`. Registration and password-recovery delivery remain skipped unless their explicit opt-in flags and sandbox identities are configured. Never use personal accounts or local demo credentials against production.
+
+The manual-only `live-qa.yml` workflow stores credentials in the `production-qa` GitHub environment and uploads reports, screenshots, video, and traces even when findings fail the run. It is intentionally not scheduled and does not run on pull requests.
+
+## Playwright AI test agents
+
+Planner, generator, and healer agent profiles live in `.codex/agents`, with their safety contract and seed plan under `specs`. Regenerate the official profiles when Playwright changes:
+
+```powershell
+npm run playwright:agents
+```
+
+Agent-generated tests must preserve the live suite's read-only defaults. A generated test is not accepted until its selectors, assertions, test data, and production safety have been reviewed and the test passes repeatably.

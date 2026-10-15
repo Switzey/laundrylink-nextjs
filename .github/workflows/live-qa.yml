@@ -1,0 +1,51 @@
+name: Live production QA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-production-qa
+  cancel-in-progress: false
+
+jobs:
+  read-only-live-qa:
+    environment: production-qa
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CI: true
+      E2E_LIVE_BASE_URL: https://www.laundrylink.com.ng
+      E2E_LIVE_CUSTOMER_EMAIL: ${{ secrets.E2E_LIVE_CUSTOMER_EMAIL }}
+      E2E_LIVE_CUSTOMER_PASSWORD: ${{ secrets.E2E_LIVE_CUSTOMER_PASSWORD }}
+      E2E_LIVE_VENDOR_EMAIL: ${{ secrets.E2E_LIVE_VENDOR_EMAIL }}
+      E2E_LIVE_VENDOR_PASSWORD: ${{ secrets.E2E_LIVE_VENDOR_PASSWORD }}
+      E2E_LIVE_ADMIN_EMAIL: ${{ secrets.E2E_LIVE_ADMIN_EMAIL }}
+      E2E_LIVE_ADMIN_PASSWORD: ${{ secrets.E2E_LIVE_ADMIN_PASSWORD }}
+      E2E_LIVE_ENABLE_NEGATIVE_AUTH: "false"
+      E2E_LIVE_ALLOW_EMAIL: "false"
+      E2E_LIVE_ALLOW_ACCOUNT_CREATION: "false"
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Use Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run production-safe browser suite
+        run: npm run test:e2e:live
+      - name: Upload Playwright evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: live-qa-playwright-evidence
+          path: |
+            playwright-report/live/
+            test-results/live/
+            test-results/live-results.json
+          retention-days: 14
