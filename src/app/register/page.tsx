@@ -12,9 +12,10 @@ import { authPath, sanitizeReturnTo } from "@/lib/auth-intent";
 
 export const metadata: Metadata = { title: "Create account" };
 
-export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ error?: string; returnTo?: string }> }) {
-  const { error, returnTo: requestedReturnTo } = await searchParams;
+export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ error?: string; returnTo?: string; role?: string }> }) {
+  const { error, returnTo: requestedReturnTo, role } = await searchParams;
   const returnTo = sanitizeReturnTo(requestedReturnTo);
+  const defaultRole = role === "VENDOR_OWNER" ? "VENDOR_OWNER" : "CUSTOMER";
   const currentUser = await getCurrentUser();
   if (currentUser) redirect(destinationForUser(currentUser, returnTo));
   return (
@@ -26,7 +27,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
         {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
         <label><span className="field-label">Full name</span><input className="field" name="name" autoComplete="name" maxLength={100} required /></label>
         <label><span className="field-label">Email</span><input className="field" name="email" type="email" autoComplete="email" inputMode="email" required /></label>
-        <label><span className="field-label">Account type</span><select className="field" name="role" defaultValue="CUSTOMER"><option value="CUSTOMER">Book laundry services</option><option value="VENDOR_OWNER">Run a laundry business</option></select></label>
+        <label><span className="field-label">Account type</span><select className="field" name="role" defaultValue={defaultRole}><option value="CUSTOMER">Book laundry services</option><option value="VENDOR_OWNER">Run a laundry business</option></select></label>
         <label><span className="field-label">Phone</span><input className="field" name="phone" type="tel" autoComplete="tel" placeholder="+2348012345678" maxLength={30} /><span className="mt-1.5 block text-xs text-zinc-500">Required for laundry businesses. Use international format.</span></label>
         <label><span className="field-label">Address</span><input className="field" name="address" autoComplete="street-address" maxLength={250} /></label>
         <PasswordField name="password" label="Password" autoComplete="new-password" minLength={12} hint="Use at least 12 characters." />

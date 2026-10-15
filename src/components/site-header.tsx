@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bell, LayoutDashboard, LogIn, Menu, ShoppingBag, UserRound } from "lucide-react";
+import { Bell, CircleHelp, LayoutDashboard, LogIn, Menu, ShoppingBag, Store, UserRound } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { getCurrentUser, dashboardForRole } from "@/lib/auth";
 import { BrandLogo } from "@/components/brand-logo";
@@ -13,6 +13,8 @@ export async function SiteHeader() {
         <BrandLogo compact />
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary navigation">
           <Link className="nav-link" href="/cleaners">Find a cleaner</Link>
+          {!user && <Link className="nav-link" href="/how-it-works">How it works</Link>}
+          {!user && <Link className="nav-link" href="/vendor-registration">For businesses</Link>}
           {user && <Link className="nav-link" href={dashboardForRole(user.role)}>Dashboard</Link>}
           {user?.role === "CUSTOMER" && <Link className="nav-link" href="/orders/new">Book laundry</Link>}
           {user?.role === "VENDOR_OWNER" && <Link className="nav-link" href="/cleaner/onboarding">Onboarding</Link>}
@@ -34,6 +36,7 @@ export async function SiteHeader() {
           <summary className="icon-button list-none"><Menu size={21} /><span className="sr-only">Open menu</span></summary>
           <div className="absolute right-0 mt-3 w-64 rounded-lg border border-zinc-200 bg-white p-3 shadow-xl">
             <Link className="mobile-link" href="/cleaners"><ShoppingBag size={17} />Find a cleaner</Link>
+            {!user && <><Link className="mobile-link" href="/how-it-works"><CircleHelp size={17} />How it works</Link><Link className="mobile-link" href="/vendor-registration"><Store size={17} />For businesses</Link></>}
             {user ? <>
               <Link className="mobile-link" href={dashboardForRole(user.role)}><LayoutDashboard size={17} />Dashboard</Link>
               {user.role === "VENDOR_OWNER" && <Link className="mobile-link" href="/cleaner/onboarding"><ShoppingBag size={17} />Onboarding</Link>}

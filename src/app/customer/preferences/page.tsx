@@ -1,0 +1,15 @@
+import type { Metadata } from "next";
+import { saveCustomerPreferencesAction } from "@/app/actions/account";
+import { CustomerAccountNav } from "@/components/customer-account-nav";
+import { requireUser } from "@/lib/auth";
+import { one } from "@/lib/db";
+
+export const metadata: Metadata = { title: "Laundry preferences" };
+type Preferences = { fragrance_preference: string | null; detergent_sensitivity: string | null; ironing_instructions: string | null; folding_style: string | null; special_garment_care: string | null };
+
+export default async function PreferencesPage({ searchParams }: { searchParams: Promise<{ success?: string; error?: string }> }) {
+  const user = await requireUser("CUSTOMER", { returnTo: "/customer/preferences" });
+  const message = await searchParams;
+  const preferences = await one<Preferences>("SELECT * FROM customer_preferences WHERE user_id = ?", user.id);
+  return <div className="page"><CustomerAccountNav /><div className="page-header"><div><p className="eyebrow">Saved care profile</p><h1 className="page-title">Laundry preferences</h1><p className="page-copy">Store your usual care instructions so they are ready when you book.</p></div></div>{message.success && <p className="mb-5 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">{message.success.replaceAll("+", " ")}</p>}{message.error && <p className="mb-5 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{message.error.replaceAll("+", " ")}</p>}<form action={saveCustomerPreferencesAction} className="surface mx-auto max-w-3xl p-6 sm:p-8"><div className="form-grid two"><label><span className="field-label">Fragrance preference</span><input className="field" name="fragrance_preference" maxLength={120} defaultValue={preferences?.fragrance_preference ?? ""} placeholder="Unscented, light, floral" /></label><label><span className="field-label">Folding style</span><input className="field" name="folding_style" maxLength={120} defaultValue={preferences?.folding_style ?? ""} placeholder="Retail fold, rolled, hang shirts" /></label><label><span className="field-label">Detergent sensitivity</span><textarea className="field min-h-28" name="detergent_sensitivity" maxLength={500} defaultValue={preferences?.detergent_sensitivity ?? ""} placeholder="Allergies, sensitive skin, preferred products" /></label><label><span className="field-label">Ironing instructions</span><textarea className="field min-h-28" name="ironing_instructions" maxLength={500} defaultValue={preferences?.ironing_instructions ?? ""} placeholder="Creases, steam only, items not to iron" /></label><label className="sm:col-span-2"><span className="field-label">Special garment care</span><textarea className="field min-h-32" name="special_garment_care" maxLength={1000} defaultValue={preferences?.special_garment_care ?? ""} placeholder="Delicates, stains, colours, fabric-specific instructions" /></label></div><button className="btn-primary mt-5" type="submit">Save preferences</button></form></div>;
+}

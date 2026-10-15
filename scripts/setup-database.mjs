@@ -5,6 +5,8 @@ import { hashSync } from "bcryptjs";
 import { applyAuthSchemaToSqlite } from "./auth-schema.mjs";
 import { applyOnboardingSchemaToSqlite } from "./onboarding-schema.mjs";
 import { applySecuritySchemaToSqlite } from "./security-schema.mjs";
+import { applyMarketplaceSchemaToSqlite } from "./marketplace-schema.mjs";
+import { applyCustomerAccountSchemaToSqlite } from "./customer-account-schema.mjs";
 
 if (process.env.TURSO_DATABASE_URL && !process.env.DATABASE_PATH) {
   console.log("Hosted database configured; local SQLite setup skipped.");
@@ -192,6 +194,8 @@ db.exec(`
 applyAuthSchemaToSqlite(db);
 applyOnboardingSchemaToSqlite(db);
 applySecuritySchemaToSqlite(db);
+applyMarketplaceSchemaToSqlite(db);
+applyCustomerAccountSchemaToSqlite(db);
 
 const existingUsers = db.prepare("SELECT COUNT(1) AS count FROM users").get().count;
 if (existingUsers > 0) {
@@ -219,12 +223,13 @@ try {
     INSERT INTO cleaners
       (user_id, business_name, description, address, city, phone, business_phone_verified_at,
        business_phone_verified_e164, rating, turnaround_time, opening_hours, is_available,
-       is_approved, contact_name, business_email, state, lga, area, verification_status,
+       is_approved, contact_name, business_email, state, lga, area, latitude, longitude,
+       pickup_radius_km, delivery_radius_km, verification_status,
        onboarding_step, submitted_at, approved_at, is_published, is_suspended, created_at, updated_at)
     VALUES (?, 'FreshFold Laundry', 'Neighborhood wash, fold, and dry-cleaning with careful packaging.',
       '8 Admiralty Road', 'Lagos', '+2348030000001', ?, '+2348030000001', 4.8, '24-48 hours',
       'Mon-Sat, 8am-6pm', 1, 1, 'Bisi Fresh', 'freshfold@example.com', 'Lagos', 'Eti-Osa',
-      'Lekki', 'approved', 'submitted', ?, ?, 1, 0, ?, ?)
+      'Lekki', 6.4281, 3.4219, 8, 12, 'approved', 'submitted', ?, ?, 1, 0, ?, ?)
   `).run(cleanerUserId, timestamp, timestamp, timestamp, timestamp, timestamp).lastInsertRowid);
 
   db.prepare(`INSERT INTO vendor_memberships (cleaner_id, user_id, role, created_at, updated_at) VALUES (?, ?, 'VENDOR_OWNER', ?, ?)`).run(cleanerId, cleanerUserId, timestamp, timestamp);
@@ -245,11 +250,11 @@ try {
   insertVendorFile.run(cleanerId, "cover", "demo-cover.png", "b".repeat(64), timestamp, timestamp);
   insertVendorFile.run(cleanerId, "identity_document", "demo-identity.png", "c".repeat(64), timestamp, timestamp);
 
-  const insertService = db.prepare(`INSERT INTO services (cleaner_id, name, description, price, unit, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`);
-  insertService.run(cleanerId, "Shirt Laundry", "Washed, pressed, and folded shirts.", 1200, "per_item", timestamp, timestamp);
-  insertService.run(cleanerId, "Suit Dry Cleaning", "Two-piece suit care with finishing.", 6500, "per_item", timestamp, timestamp);
-  insertService.run(cleanerId, "Wash & Fold", "Everyday clothing by weight.", 1800, "per_kg", timestamp, timestamp);
-  insertService.run(cleanerId, "Bedding Set", "Sheets, pillowcases, and duvet cover.", 5000, "flat_rate", timestamp, timestamp);
+  const insertService = db.prepare(`INSERT INTO services (cleaner_id, name, category, description, price, unit, turnaround_time, express_available, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`);
+  insertService.run(cleanerId, "Shirt Laundry", "washing", "Washed, pressed, and folded shirts.", 1200, "per_item", "24 hours", 1, timestamp, timestamp);
+  insertService.run(cleanerId, "Suit Dry Cleaning", "dry cleaning", "Two-piece suit care with finishing.", 6500, "per_item", "48 hours", 0, timestamp, timestamp);
+  insertService.run(cleanerId, "Wash & Fold", "washing", "Everyday clothing by weight.", 1800, "per_kg", "24-48 hours", 1, timestamp, timestamp);
+  insertService.run(cleanerId, "Bedding Set", "bedding", "Sheets, pillowcases, and duvet cover.", 5000, "flat_rate", "48 hours", 0, timestamp, timestamp);
 
   db.prepare(`INSERT INTO notifications (user_id, title, message, type, data, created_at, updated_at) VALUES (?, 'Welcome to LaundryLink', 'Your demo administrator account is ready.', 'general', ?, ?, ?)`)
     .run(adminId, JSON.stringify({ demo: true }), timestamp, timestamp);

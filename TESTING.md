@@ -11,9 +11,9 @@ The browser harness always starts LaundryLink on `http://127.0.0.1:3100` with a 
 
 ## Coverage map
 
-Vitest covers authentication and onboarding validation, role authorization, return URL safety, phone verification, vendor eligibility, cart quantity and price rules, checkout validation, order lifecycle policy, account/order ownership, document permissions, session expiry, database constraints, audit records, and preservation of existing orders during suspension.
+Vitest covers authentication and onboarding validation, role authorization, return URL safety, phone verification, vendor eligibility, marketplace filtering and sorting, waitlist constraints, cart quantity and price rules, checkout validation, order lifecycle policy, account/order ownership, document permissions, session expiry, database constraints, audit records, and preservation of existing orders during suspension.
 
-Playwright covers customer login/logout and cookie security, session expiration, unauthorized admin access, cleaner discovery, service selection, checkout intent restoration, order creation, vendor processing, customer tracking, admin vendor approval, and anonymous denial for restricted vendor documents.
+Playwright covers customer login/logout and cookie security, session expiration, unauthorized admin access, guest marketplace filters, list/map switching, vendor comparison, waitlist conversion, cleaner discovery, service selection, checkout intent restoration, order creation, vendor processing, customer tracking, admin vendor approval, and anonymous denial for restricted vendor documents. Automated WCAG A/AA checks cover the homepage, directory, cleaner profile, waitlist, and how-it-works page.
 
 Google and Apple are deliberately not contacted by CI. Local validation and provider-independent auth behavior are tested, but passing tests do not prove that live OAuth client IDs, secrets, redirect URIs, consent-screen settings, or provider availability are correct.
 

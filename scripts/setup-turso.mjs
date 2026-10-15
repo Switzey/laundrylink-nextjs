@@ -6,6 +6,8 @@ import { createClient } from "@libsql/client";
 import { applyAuthSchemaToLibsql } from "./auth-schema.mjs";
 import { applyOnboardingSchemaToLibsql } from "./onboarding-schema.mjs";
 import { applySecuritySchemaToLibsql } from "./security-schema.mjs";
+import { applyMarketplaceSchemaToLibsql } from "./marketplace-schema.mjs";
+import { applyCustomerAccountSchemaToLibsql } from "./customer-account-schema.mjs";
 
 const url = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
@@ -53,6 +55,8 @@ for (const object of objects.filter((item) => item.type === "table")) {
 await applyAuthSchemaToLibsql(destination);
 await applyOnboardingSchemaToLibsql(destination);
 await applySecuritySchemaToLibsql(destination);
+await applyMarketplaceSchemaToLibsql(destination);
+await applyCustomerAccountSchemaToLibsql(destination);
 
 const existingUsers = await destination.execute("SELECT COUNT(1) AS count FROM users");
 if (Number(existingUsers.rows[0]?.count ?? 0) > 0) {
@@ -80,6 +84,10 @@ const tableOrder = [
   "phone_verification_attempts",
   "vendor_verifications",
   "vendor_files",
+  "waitlist_leads",
+  "favorite_cleaners",
+  "customer_preferences",
+  "support_tickets",
 ];
 
 for (const table of tableOrder) {

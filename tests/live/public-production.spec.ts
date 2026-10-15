@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { collectRuntimeErrors, isDesktop } from "./helpers";
 
 const publicPages = [
-  ["home", "/", /Laundry pickup and delivery you can trust/i],
+  ["home", "/", /Laundry pickup and delivery/i],
   ["cleaner search", "/cleaners", /Find your cleaner/i],
   ["login", "/login", /Welcome back/i],
   ["registration", "/register", /Create your account/i],

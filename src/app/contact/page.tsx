@@ -1,0 +1,8 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+
+export const metadata: Metadata = { title: "Contact LaundryLink", description: "Contact LaundryLink customer, vendor, and account support." };
+
+export default function ContactPage() {
+  return <div className="page max-w-4xl"><header className="border-b border-zinc-200 pb-8"><p className="eyebrow">Contact</p><h1 className="page-title">How can we help?</h1><p className="page-copy text-lg">Choose the route that best matches your question. Include your order number when contacting us about an active booking.</p></header><div className="grid gap-8 py-8 md:grid-cols-2"><section><h2 className="section-title">Customer and order support</h2><p className="mt-3 leading-7 text-zinc-600">Questions about cleaner discovery, an active order, account access, or a review.</p><a className="btn-secondary mt-5" href="mailto:support@laundrylink.com.ng">support@laundrylink.com.ng</a></section><section><h2 className="section-title">Vendor support</h2><p className="mt-3 leading-7 text-zinc-600">Questions about registration, onboarding documents, verification, services, or marketplace availability.</p><a className="btn-secondary mt-5" href="mailto:vendors@laundrylink.com.ng">vendors@laundrylink.com.ng</a></section></div><div className="border-t border-zinc-200 pt-8"><p className="text-sm text-zinc-600">For common booking and account questions, visit the <Link className="font-bold text-brand-blue" href="/help">help centre</Link>. Never send passwords, verification codes, full bank details, or identity documents by email.</p></div></div>;
+}

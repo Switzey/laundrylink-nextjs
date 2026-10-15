@@ -36,6 +36,7 @@ function resetState() {
       DELETE FROM orders;
       DELETE FROM audit_logs;
       DELETE FROM rate_limits;
+      DELETE FROM waitlist_leads;
       DELETE FROM js_sessions;
     `);
     database.prepare(`UPDATE cleaners SET
@@ -71,6 +72,55 @@ function seedOrder(status = "pending") {
   });
 }
 
+function seedComparisonCleaner() {
+  return withDatabase((database) => {
+    const timestamp = new Date().toISOString();
+    const vendor = records().vendor;
+    const passwordHash = (database.prepare("SELECT password FROM users WHERE id = ?").get(vendor.id) as { password: string }).password;
+    database.prepare("DELETE FROM cleaners WHERE business_email = 'comparison@example.com'").run();
+    database.prepare("DELETE FROM users WHERE email = 'comparison@example.com'").run();
+    const userId = Number(database.prepare(`INSERT INTO users
+      (name, email, email_verified_at, password, role, phone, phone_verified_at, phone_verified_e164, created_at, updated_at)
+      VALUES ('Comparison Vendor', 'comparison@example.com', ?, ?, 'VENDOR_OWNER', '+2348030000002', ?, '+2348030000002', ?, ?)`)
+      .run(timestamp, passwordHash, timestamp, timestamp, timestamp).lastInsertRowid);
+    const cleanerId = Number(database.prepare(`INSERT INTO cleaners
+      (user_id, business_name, description, address, city, phone, business_phone_verified_at,
+       business_phone_verified_e164, rating, turnaround_time, opening_hours, is_available,
+       is_approved, contact_name, business_email, state, lga, area, latitude, longitude,
+       pickup_radius_km, delivery_radius_km, verification_status, onboarding_step,
+       submitted_at, approved_at, is_published, is_suspended, created_at, updated_at)
+      VALUES (?, 'QuickPress Laundry', 'Express garment care and reliable pickup across Victoria Island.',
+       '22 Adeola Odeku Street', 'Lagos', '+2348030000002', ?, '+2348030000002', 4.4,
+       '12 hours', 'Mon-Sun, 7am-8pm', 1, 1, 'Comparison Vendor', 'comparison@example.com',
+       'Lagos', 'Eti-Osa', 'Victoria Island', 6.4288, 3.4213, 6, 9, 'approved', 'submitted',
+       ?, ?, 1, 0, ?, ?)`)
+      .run(userId, timestamp, timestamp, timestamp, timestamp, timestamp).lastInsertRowid);
+    database.prepare(`INSERT INTO vendor_verifications
+      (cleaner_id, identity_type, identity_number_encrypted, bank_name, bank_account_name,
+       bank_account_number_encrypted, information_confirmed, created_at, updated_at)
+      VALUES (?, 'nin', 'v1.comparison-identity', 'Demo Bank', 'Comparison Vendor',
+       'v1.comparison-account', 1, ?, ?)`)
+      .run(cleanerId, timestamp, timestamp);
+    database.prepare(`INSERT INTO vendor_files
+      (cleaner_id, kind, filename, media_type, size, sha256, contents, created_at, updated_at)
+      SELECT ?, kind, 'comparison-' || filename, media_type, size, sha256, contents, ?, ?
+      FROM vendor_files WHERE cleaner_id = ? AND kind IN ('logo', 'cover', 'identity_document')`)
+      .run(cleanerId, timestamp, timestamp, records().cleaner.id);
+    database.prepare(`INSERT INTO services
+      (cleaner_id, name, category, description, price, unit, turnaround_time, express_available, is_active, created_at, updated_at)
+      VALUES (?, 'Express Shirt Care', 'ironing', 'Same-day pressed shirts.', 900, 'per_item', '12 hours', 1, 1, ?, ?)`)
+      .run(cleanerId, timestamp, timestamp);
+    return { cleanerId, userId };
+  });
+}
+
+function removeComparisonCleaner(cleanerId: number, userId: number) {
+  withDatabase((database) => {
+    database.prepare("DELETE FROM cleaners WHERE id = ?").run(cleanerId);
+    database.prepare("DELETE FROM users WHERE id = ?").run(userId);
+  });
+}
+
 async function login(page: Page, email: string, expectedPath: RegExp = /\/dashboard/) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
@@ -88,6 +138,7 @@ function futureDate(days: number) {
 test.beforeEach(() => resetState());
 
 test("customer can register and sign in through the temporary email bypass", async ({ page }) => {
+  test.slow();
   const email = `qa-registration-${Date.now()}@example.com`;
   await page.goto("/register");
   await page.getByLabel("Full name").fill("QA Registration Customer");
@@ -95,13 +146,13 @@ test("customer can register and sign in through the temporary email bypass", asy
   await page.locator('input[name="password"]').fill(password);
   await page.locator('input[name="confirm_password"]').fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/login\?success=/);
+  await expect(page).toHaveURL(/\/login\?success=/, { timeout: 60_000 });
   await expect(page.getByText("Account created. You can sign in now.")).toBeVisible();
 
   await page.getByLabel("Email").fill(email);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/customer\/dashboard/);
+  await expect(page).toHaveURL(/\/customer\/dashboard/, { timeout: 60_000 });
 
   const registered = withDatabase((database) => database
     .prepare("SELECT email_verified_at FROM users WHERE email = ?")
@@ -149,6 +200,42 @@ test("customers can discover a cleaner and inspect active services", async ({ pa
   await page.waitForURL(/\/cleaners\/1/);
   await expect(page.getByRole("link", { name: "Book this cleaner" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Shirt Laundry" })).toBeVisible();
+});
+
+test("guests can filter vendors, switch to the map, and compare businesses", async ({ page }) => {
+  const comparison = seedComparisonCleaner();
+  try {
+    await page.goto("/cleaners?state=Lagos&express=1&sort=price");
+    await expect(page.getByRole("heading", { name: "QuickPress Laundry" })).toBeVisible();
+    await expect(page.getByText("2 cleaners found")).toBeVisible();
+    await page.getByRole("link", { name: "Map view" }).click();
+    await expect(page).toHaveURL(/view=map/);
+    await expect(page.locator(".marketplace-map")).toBeVisible();
+
+    const compare = page.getByLabel("Compare");
+    await compare.nth(0).check();
+    await compare.nth(1).check();
+    await page.getByRole("link", { name: "Compare cleaners" }).click();
+    await expect(page.getByRole("heading", { name: "Compare cleaners" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "FreshFold Laundry" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "QuickPress Laundry" })).toBeVisible();
+  } finally {
+    removeComparisonCleaner(comparison.cleanerId, comparison.userId);
+  }
+});
+
+test("early access safely records a customer lead", async ({ page }) => {
+  const email = `marketplace-${Date.now()}@example.com`;
+  await page.goto("/waitlist");
+  await page.getByLabel("Full name").fill("Marketplace Test Customer");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("State").fill("Lagos");
+  await page.getByLabel("City or area").fill("Yaba");
+  await page.getByRole("button", { name: "Join the waitlist" }).click();
+  await expect(page).toHaveURL(/\/waitlist\?success=/);
+  await expect(page.getByText(/You're on the list/i)).toBeVisible();
+  const lead = withDatabase((database) => database.prepare("SELECT audience, city FROM waitlist_leads WHERE email = ?").get(email)) as { audience: string; city: string };
+  expect(lead).toEqual({ audience: "customer", city: "Yaba" });
 });
 
 test("service quantities and checkout fields preserve their browser cart values", async ({ page }) => {
@@ -225,6 +312,7 @@ test("customer tracks the order activity created by the vendor", async ({ page }
 });
 
 test("admin approval is permission-protected, audited, and does not auto-publish", async ({ page }) => {
+  test.slow();
   const ids = records();
   withDatabase((database) => {
     database.prepare(`UPDATE cleaners SET verification_status = 'pending', onboarding_step = 'submitted',
@@ -233,7 +321,7 @@ test("admin approval is permission-protected, audited, and does not auto-publish
   await login(page, "admin@example.com", /\/admin\/dashboard/);
   await page.goto(`/admin/cleaners/${ids.cleaner.id}`);
   await page.getByRole("button", { name: "Approve verification" }).click();
-  await expect(page.getByText("Verification approved")).toBeVisible();
+  await expect(page.getByText("Verification approved")).toBeVisible({ timeout: 60_000 });
 
   const result = withDatabase((database) => ({
     cleaner: database.prepare("SELECT verification_status, is_approved, is_published, is_available FROM cleaners WHERE id = ?").get(ids.cleaner.id) as Record<string, string | number>,

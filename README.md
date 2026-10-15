@@ -52,6 +52,17 @@ node --env-file=.env.production.local scripts/migrate-onboarding.mjs
 
 The migration also refreshes the centralized `vendor_eligibility` database view. Verification approval, profile publication, and accepting new orders are intentionally separate states: approval never publishes a vendor automatically, and publication never makes an ineligible vendor bookable. Marketplace pages and order creation use the same eligibility view, while pausing or suspending a vendor preserves existing orders.
 
+Apply the public marketplace and customer-account schemas after onboarding for each environment:
+
+```bash
+node --env-file=.env.staging.local scripts/migrate-marketplace.mjs
+node --env-file=.env.staging.local scripts/migrate-customer-account.mjs
+node --env-file=.env.production.local scripts/migrate-marketplace.mjs
+node --env-file=.env.production.local scripts/migrate-customer-account.mjs
+```
+
+These migrations are idempotent. The marketplace migration adds waitlist validation and discovery indexes; it does not publish vendors or alter existing orders. See [Public marketplace](docs/public-marketplace.md) for routes, eligibility rules, data requirements, and the release gate.
+
 Before deploying exact-number phone verification, audit each database and then run the dedicated migration:
 
 ```bash

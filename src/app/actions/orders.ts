@@ -13,6 +13,9 @@ import { createOrderSchema, orderStatusSchema, rescheduleOrderSchema, reviewSche
 import { parseFormOrRedirect, positiveId } from "@/lib/validation";
 import { VENDOR_ROLES, type Service } from "@/lib/types";
 import { getVendorEligibility } from "@/lib/vendor-eligibility";
+import { z } from "zod";
+
+const reorderSchema = z.object({ order_id: positiveId });
 
 async function notify(userId: number, title: string, message: string, type: string, data: object) {
   await run(
@@ -258,6 +261,60 @@ export async function rescheduleOrderAction(formData: FormData) {
     await writeAuditLog({ actorUserId: user.id, action: "order.reschedule", targetType: "order", targetId: input.order_id, outcome: "succeeded", context });
   });
   redirect(`/orders/${input.order_id}?success=Schedule+updated`);
+}
+
+export async function reorderOrderAction(formData: FormData) {
+  const { user, context } = await authorizeAction({
+    action: "order.reorder",
+    roles: "CUSTOMER",
+    rateLimit: { limit: 20, windowSeconds: 60 },
+    returnTo: "/customer/orders",
+  });
+  const { order_id: orderId } = parseFormOrRedirect(reorderSchema, formData, "/customer/orders", "Choose a valid order.");
+  const order = await one<{ id: number; cleaner_id: number; status: string }>(
+    "SELECT id, cleaner_id, status FROM orders WHERE id = ? AND customer_id = ?",
+    orderId,
+    user.id,
+  );
+  if (!order) {
+    await writeAuditLog({
+      actorUserId: user.id,
+      action: "order.reorder",
+      targetType: "order",
+      targetId: orderId,
+      outcome: "denied",
+      metadata: { reason: "ownership" },
+      context,
+    });
+    redirect("/customer/orders?error=Order+access+denied");
+  }
+  if (!["completed", "cancelled"].includes(order.status)) {
+    redirect(`/orders/${order.id}?error=Only+completed+or+cancelled+orders+can+be+reordered`);
+  }
+
+  const eligibility = await getVendorEligibility(order.cleaner_id);
+  const availableItems = await one<{ count: number }>(
+    `SELECT COUNT(1) AS count
+     FROM order_items oi
+     JOIN services s ON s.id = oi.service_id
+     WHERE oi.order_id = ? AND s.cleaner_id = ? AND s.is_active = 1 AND s.price > 0 AND s.price <= 10000000`,
+    order.id,
+    order.cleaner_id,
+  );
+  if (!eligibility?.bookable || !Number(availableItems?.count ?? 0)) {
+    redirect(`/orders/${order.id}?error=This+order+cannot+be+rebooked+because+the+cleaner+or+services+are+unavailable`);
+  }
+
+  await writeAuditLog({
+    actorUserId: user.id,
+    action: "order.reorder",
+    targetType: "order",
+    targetId: order.id,
+    outcome: "succeeded",
+    metadata: { cleanerId: order.cleaner_id },
+    context,
+  });
+  redirect(`/orders/new?cleaner=${order.cleaner_id}&reorder=${order.id}`);
 }
 
 export async function createReviewAction(formData: FormData) {

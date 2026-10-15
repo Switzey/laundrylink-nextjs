@@ -7,6 +7,8 @@ import { createClient } from "@libsql/client";
 import { applyAuthSchemaToSqlite } from "./auth-schema.mjs";
 import { applyOnboardingSchemaToSqlite } from "./onboarding-schema.mjs";
 import { applySecuritySchemaToSqlite } from "./security-schema.mjs";
+import { applyMarketplaceSchemaToSqlite } from "./marketplace-schema.mjs";
+import { applyCustomerAccountSchemaToSqlite } from "./customer-account-schema.mjs";
 
 const url = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
@@ -35,6 +37,8 @@ function applyMigrations() {
   applyAuthSchemaToSqlite(database);
   applyOnboardingSchemaToSqlite(database);
   applySecuritySchemaToSqlite(database);
+  applyMarketplaceSchemaToSqlite(database);
+  applyCustomerAccountSchemaToSqlite(database);
 }
 
 try {
@@ -57,6 +61,13 @@ try {
   requiredObject("table", "phone_verification_attempts");
   requiredObject("table", "vendor_verifications");
   requiredObject("table", "vendor_files");
+  requiredObject("table", "favorite_cleaners");
+  requiredObject("table", "customer_preferences");
+  requiredObject("table", "support_tickets");
+  requiredColumn("addresses", "latitude");
+  requiredColumn("addresses", "longitude");
+  requiredColumn("addresses", "landmark");
+  requiredObject("table", "waitlist_leads");
   requiredObject("view", "vendor_eligibility");
   requiredColumn("users", "phone_verified_e164");
   requiredColumn("cleaners", "business_phone_verified_at");

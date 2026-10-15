@@ -33,7 +33,7 @@ function seedOrder(status = "pending") {
 }
 
 beforeEach(() => {
-  database.exec("DELETE FROM reviews; DELETE FROM order_items; DELETE FROM order_activities; DELETE FROM orders; DELETE FROM js_sessions; DELETE FROM audit_logs;");
+  database.exec("DELETE FROM reviews; DELETE FROM payments; DELETE FROM support_tickets; DELETE FROM favorite_cleaners; DELETE FROM customer_preferences; DELETE FROM order_items; DELETE FROM order_activities; DELETE FROM orders; DELETE FROM js_sessions; DELETE FROM audit_logs; DELETE FROM waitlist_leads;");
   database.prepare("UPDATE cleaners SET is_suspended = 0, is_available = 1, is_approved = 1, is_published = 1, verification_status = 'approved' WHERE id = ?").run(cleaner.id);
 });
 
@@ -43,6 +43,22 @@ afterAll(() => {
 });
 
 describe("database constraints", () => {
+  test("constrains and deduplicates marketplace waitlist leads", () => {
+    const timestamp = new Date().toISOString();
+    database.prepare(`INSERT INTO waitlist_leads
+      (name, email, audience, state, city, source, created_at, updated_at)
+      VALUES ('Test Customer', 'waitlist@example.com', 'customer', 'Lagos', 'Lekki', 'test', ?, ?)`)
+      .run(timestamp, timestamp);
+    assert.throws(() => database.prepare(`INSERT INTO waitlist_leads
+      (name, email, audience, state, city, source, created_at, updated_at)
+      VALUES ('Duplicate Customer', 'waitlist@example.com', 'customer', 'Lagos', 'lekki', 'test', ?, ?)`)
+      .run(timestamp, timestamp), /unique/i);
+    assert.throws(() => database.prepare(`INSERT INTO waitlist_leads
+      (name, email, audience, state, city, source, created_at, updated_at)
+      VALUES ('Invalid Lead', 'invalid@example.com', 'admin', 'Lagos', 'Lekki', 'test', ?, ?)`)
+      .run(timestamp, timestamp), /invalid waitlist audience/i);
+  });
+
   test("enforces unique normalized emails and valid service prices", () => {
     assert.throws(() => database.prepare(`INSERT INTO users
       (name, email, password, role, created_at, updated_at) VALUES ('Duplicate User', 'CUSTOMER@example.com', ?, 'CUSTOMER', ?, ?)`)
@@ -67,6 +83,31 @@ describe("database constraints", () => {
     database.prepare("DELETE FROM js_sessions WHERE expires_at <= ?").run(new Date().toISOString());
     const active = database.prepare("SELECT token_hash FROM js_sessions").get() as { token_hash: string };
     assert.equal(active.token_hash, "b".repeat(64));
+  });
+
+  test("constrains address map coordinates and customer preferences", () => {
+    const timestamp = new Date().toISOString();
+    assert.throws(() => database.prepare(`INSERT INTO addresses
+      (user_id, label, address, city, latitude, is_default, created_at, updated_at)
+      VALUES (?, 'Office', '1 Test Road', 'Lagos', 6.5, 0, ?, ?)`)
+      .run(customer.id, timestamp, timestamp), /incomplete address coordinates/i);
+    database.prepare(`INSERT INTO addresses
+      (user_id, label, address, city, landmark, latitude, longitude, is_default, created_at, updated_at)
+      VALUES (?, 'Office', '1 Test Road', 'Lagos', 'Blue gate', 6.5, 3.4, 0, ?, ?)`)
+      .run(customer.id, timestamp, timestamp);
+    assert.throws(() => database.prepare(`INSERT INTO customer_preferences
+      (user_id, fragrance_preference, created_at, updated_at) VALUES (?, ?, ?, ?)`)
+      .run(customer.id, "x".repeat(121), timestamp, timestamp), /fragrance preference too long/i);
+  });
+
+  test("deduplicates favourites and constrains support ticket state", () => {
+    const timestamp = new Date().toISOString();
+    database.prepare("INSERT INTO favorite_cleaners (user_id, cleaner_id, created_at) VALUES (?, ?, ?)").run(customer.id, cleaner.id, timestamp);
+    assert.throws(() => database.prepare("INSERT INTO favorite_cleaners (user_id, cleaner_id, created_at) VALUES (?, ?, ?)").run(customer.id, cleaner.id, timestamp), /unique/i);
+    assert.throws(() => database.prepare(`INSERT INTO support_tickets
+      (user_id, category, subject, message, status, priority, created_at, updated_at)
+      VALUES (?, 'order', 'Missing item', 'A garment is missing from my order.', 'deleted', 'normal', ?, ?)`)
+      .run(customer.id, timestamp, timestamp), /invalid support status/i);
   });
 });
 

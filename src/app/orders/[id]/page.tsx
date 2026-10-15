@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarClock, MapPin, PackageCheck, Star } from "lucide-react";
+import { CalendarClock, MapPin, PackageCheck, RefreshCw, Star } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
-import { rescheduleOrderAction, updateOrderStatusAction } from "@/app/actions/orders";
+import { reorderOrderAction, rescheduleOrderAction, updateOrderStatusAction } from "@/app/actions/orders";
 import { StatusBadge } from "@/components/status-badge";
 import { cleanerIdForUser, dashboardForRole, requireUser } from "@/lib/auth";
 import { VENDOR_ROLES } from "@/lib/types";
@@ -44,10 +44,10 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
           {isVendor && nextStatuses.length > 0 && <section className="surface panel"><h2 className="section-title">Update progress</h2><div className="mt-4 grid gap-2">{nextStatuses.map((status) => <form action={updateOrderStatusAction} key={status}><input type="hidden" name="order_id" value={order.id} /><input type="hidden" name="status" value={status} /><button className={status === "cancelled" ? "btn-danger w-full" : "btn-primary w-full"} type="submit">Mark as {humanize(status)}</button></form>)}</div></section>}
           {user.role === "CUSTOMER" && ["pending", "accepted"].includes(order.status) && <details className="surface panel"><summary className="font-bold text-brand-navy">Reschedule pickup</summary><form action={rescheduleOrderAction} className="form-grid mt-5"><input type="hidden" name="order_id" value={order.id} /><label><span className="field-label">Pickup date</span><input className="field" type="date" name="pickup_date" defaultValue={order.pickup_date ?? ""} required /></label><label><span className="field-label">Pickup window</span><select className="field" name="pickup_time_window" defaultValue={order.pickup_time_window ?? ""}>{TIME_WINDOWS.map((window) => <option key={window}>{window}</option>)}</select></label><label><span className="field-label">Delivery date</span><input className="field" type="date" name="delivery_date" defaultValue={order.delivery_date ?? ""} /></label><label><span className="field-label">Delivery window</span><select className="field" name="delivery_time_window" defaultValue={order.delivery_time_window ?? ""}><option value="">Not set</option>{TIME_WINDOWS.map((window) => <option key={window}>{window}</option>)}</select></label><button className="btn-secondary" type="submit">Save schedule</button></form></details>}
           {user.role === "CUSTOMER" && order.status === "completed" && !review && <Link className="btn-primary" href={`/orders/${order.id}/review`}><Star size={17} />Review this cleaner</Link>}
+          {user.role === "CUSTOMER" && ["completed", "cancelled"].includes(order.status) && <form action={reorderOrderAction}><input type="hidden" name="order_id" value={order.id} /><button className="btn-secondary w-full" type="submit"><RefreshCw size={17} />Reorder with current prices</button></form>}
           <Link className="btn-secondary" href={dashboardForRole(user.role)}><PackageCheck size={17} />Back to dashboard</Link>
         </aside>
       </div>
     </div>
   );
 }
-
