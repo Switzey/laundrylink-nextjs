@@ -31,8 +31,25 @@ const AUTH_TABLE_STATEMENTS = [
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE(cleaner_id, user_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS phone_verification_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    cleaner_id INTEGER,
+    purpose TEXT NOT NULL CHECK(purpose IN ('account', 'vendor_business')),
+    phone_e164 TEXT NOT NULL CHECK(length(phone_e164) BETWEEN 9 AND 16 AND phone_e164 LIKE '+%'),
+    provider_sid TEXT NOT NULL CHECK(length(provider_sid) BETWEEN 8 AND 64),
+    status TEXT NOT NULL CHECK(status IN ('pending', 'checking', 'consumed', 'invalidated', 'expired')),
+    expires_at TEXT NOT NULL,
+    consumed_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (cleaner_id) REFERENCES cleaners(id) ON DELETE CASCADE,
+    CHECK((purpose = 'account' AND cleaner_id IS NULL) OR (purpose = 'vendor_business' AND cleaner_id IS NOT NULL))
+  )`,
   "CREATE INDEX IF NOT EXISTS auth_tokens_user_type_index ON auth_tokens(user_id, type, expires_at)",
   "CREATE INDEX IF NOT EXISTS vendor_memberships_user_index ON vendor_memberships(user_id, role)",
+  "CREATE INDEX IF NOT EXISTS phone_attempt_target_index ON phone_verification_attempts(user_id, purpose, cleaner_id, status, expires_at)",
 ];
 
 const ROLE_MIGRATION = `UPDATE users SET role = CASE role
@@ -44,13 +61,12 @@ END`;
 
 function verificationMigrationSql() {
   return [
+    "DROP INDEX IF EXISTS phone_attempt_provider_sid_unique",
     ROLE_MIGRATION,
     `UPDATE users
      SET email_verified_at = COALESCE(email_verified_at, updated_at, created_at, CURRENT_TIMESTAMP)
      WHERE email_verified_at IS NULL`,
-    `UPDATE users
-     SET phone_verified_at = COALESCE(phone_verified_at, updated_at, created_at, CURRENT_TIMESTAMP)
-     WHERE phone IS NOT NULL AND role IN ('VENDOR_OWNER', 'VENDOR_MANAGER', 'VENDOR_STAFF', 'RIDER')`,
+    `UPDATE users SET phone_verified_at = NULL WHERE phone_verified_e164 IS NULL`,
     `INSERT OR IGNORE INTO vendor_memberships (cleaner_id, user_id, role, created_at, updated_at)
      SELECT id, user_id, 'VENDOR_OWNER', COALESCE(created_at, CURRENT_TIMESTAMP), COALESCE(updated_at, CURRENT_TIMESTAMP)
      FROM cleaners WHERE user_id IS NOT NULL`,
@@ -63,6 +79,7 @@ export function applyAuthSchemaToSqlite(database) {
   database.exec("DROP TRIGGER IF EXISTS validate_users_update");
   const columns = database.prepare("PRAGMA table_info(users)").all().map((column) => String(column.name));
   if (!columns.includes("phone_verified_at")) database.exec("ALTER TABLE users ADD COLUMN phone_verified_at TEXT");
+  if (!columns.includes("phone_verified_e164")) database.exec("ALTER TABLE users ADD COLUMN phone_verified_e164 TEXT");
   for (const statement of AUTH_TABLE_STATEMENTS) database.exec(statement);
   for (const statement of verificationMigrationSql()) database.exec(statement);
 }
@@ -74,6 +91,9 @@ export async function applyAuthSchemaToLibsql(client) {
   const columns = await client.execute("PRAGMA table_info(users)");
   if (!columns.rows.some((column) => String(column.name) === "phone_verified_at")) {
     await client.execute("ALTER TABLE users ADD COLUMN phone_verified_at TEXT");
+  }
+  if (!columns.rows.some((column) => String(column.name) === "phone_verified_e164")) {
+    await client.execute("ALTER TABLE users ADD COLUMN phone_verified_e164 TEXT");
   }
   for (const statement of AUTH_TABLE_STATEMENTS) await client.execute(statement);
   for (const statement of verificationMigrationSql()) await client.execute(statement);

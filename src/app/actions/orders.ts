@@ -11,6 +11,7 @@ import { DELIVERY_FEE, PLATFORM_FEE, STATUS_FLOW, TIME_WINDOWS } from "@/lib/con
 import { all, now, one, run, transaction } from "@/lib/db";
 import { isoDate, optionalTextField, parseFormOrRedirect, positiveId } from "@/lib/validation";
 import { VENDOR_ROLES, type Service } from "@/lib/types";
+import { getVendorEligibility } from "@/lib/vendor-eligibility";
 
 const optionalDate = z.preprocess(
   (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
@@ -104,11 +105,14 @@ export async function createOrderAction(formData: FormData) {
     returnTo,
   });
   const input = parseFormOrRedirect(createOrderSchema, formData, returnTo, "Enter valid order details.");
-  const cleaner = await one<{ id: number; user_id: number | null; business_name: string }>(
-    "SELECT id, user_id, business_name FROM cleaners WHERE id = ? AND is_approved = 1 AND is_available = 1",
-    input.cleaner_id,
-  );
-  if (!cleaner) redirect(pathWithParams(returnTo, { error: "Choose an approved and available cleaner" }));
+  const eligibility = await getVendorEligibility(input.cleaner_id);
+  const cleaner = eligibility?.bookable
+    ? await one<{ id: number; user_id: number | null; business_name: string }>(
+      "SELECT id, user_id, business_name FROM cleaners WHERE id = ?",
+      input.cleaner_id,
+    )
+    : null;
+  if (!cleaner) redirect(pathWithParams(returnTo, { error: "This cleaner is not accepting new orders" }));
 
   const availableServices = await all<Service>(
     "SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1",
@@ -147,9 +151,25 @@ export async function createOrderAction(formData: FormData) {
     redirect(pathWithParams(returnTo, { error: "Add valid pickup and delivery addresses" }));
   }
 
-  const subtotal = selected.reduce((sum, item) => sum + Number(item.service.price) * item.quantity, 0);
-  const total = subtotal + DELIVERY_FEE + PLATFORM_FEE;
-  const orderId = await transaction(async () => {
+  const selectedQuantities = selected.map((item) => ({ serviceId: item.service.id, quantity: item.quantity }));
+  const created = await transaction(async () => {
+    const currentEligibility = await getVendorEligibility(input.cleaner_id);
+    if (!currentEligibility?.bookable) return { error: "This cleaner stopped accepting new orders. Please choose another cleaner." } as const;
+    const currentServices = await all<Service>(
+      `SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1
+       AND price > 0 AND price <= 10000000 ORDER BY name`,
+      input.cleaner_id,
+    );
+    const servicesById = new Map(currentServices.map((service) => [service.id, service]));
+    const currentSelected = selectedQuantities.flatMap(({ serviceId, quantity }) => {
+      const service = servicesById.get(serviceId);
+      return service ? [{ service, quantity }] : [];
+    });
+    if (currentSelected.length !== selectedQuantities.length) {
+      return { error: "One or more selected services are no longer available." } as const;
+    }
+    const subtotal = currentSelected.reduce((sum, item) => sum + Number(item.service.price) * item.quantity, 0);
+    const total = subtotal + DELIVERY_FEE + PLATFORM_FEE;
     const result = await run(
       `INSERT INTO orders
        (customer_id, cleaner_id, pickup_address, delivery_address, pickup_date, pickup_time_window, delivery_date, delivery_time_window, status, subtotal, delivery_fee, platform_fee, total, payment_status, pickup_notes, delivery_notes, notes, created_at, updated_at)
@@ -173,7 +193,7 @@ export async function createOrderAction(formData: FormData) {
       now(),
     );
     const id = Number(result.lastInsertRowid);
-    for (const item of selected) {
+    for (const item of currentSelected) {
       await run(
         "INSERT INTO order_items (order_id, service_id, quantity, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
         id,
@@ -206,12 +226,13 @@ export async function createOrderAction(formData: FormData) {
       targetType: "order",
       targetId: id,
       outcome: "succeeded",
-      metadata: { cleanerId: input.cleaner_id, itemCount: selected.length },
+      metadata: { cleanerId: input.cleaner_id, itemCount: currentSelected.length },
       context,
     });
-    return id;
+    return { id } as const;
   });
-  redirect(`/orders/${orderId}?success=Order+created+successfully`);
+  if ("error" in created) redirect(pathWithParams(returnTo, { error: created.error }));
+  redirect(`/orders/${created.id}?success=Order+created+successfully`);
 }
 
 export async function updateOrderStatusAction(formData: FormData) {

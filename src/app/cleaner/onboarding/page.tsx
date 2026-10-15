@@ -10,13 +10,16 @@ import {
   saveLocationOnboardingAction,
   saveVerificationOnboardingAction,
   submitVendorOnboardingAction,
+  sendOnboardingBusinessPhoneVerificationAction,
   toggleOnboardingServiceAction,
+  verifyOnboardingBusinessPhoneAction,
 } from "@/app/actions/onboarding";
 import { OnboardingStepper, ONBOARDING_STEPS, type OnboardingStep } from "@/components/onboarding-stepper";
 import { SubmitButton } from "@/components/submit-button";
 import { cleanerIdForUser, requireUser } from "@/lib/auth";
 import { all, one } from "@/lib/db";
 import { money } from "@/lib/format";
+import { businessPhoneIsVerified } from "@/lib/phone-state";
 import { maskSensitiveValue } from "@/lib/sensitive-data";
 import type { Cleaner, Service, VendorFileMetadata, VendorVerification } from "@/lib/types";
 
@@ -38,10 +41,12 @@ function masked(value: string | null) {
   }
 }
 
-function StatusNotice({ error, saved }: { error?: string; saved?: string }) {
+function StatusNotice({ error, notice, saved, sent }: { error?: string; notice?: string; saved?: string; sent?: string }) {
   return <>
     {error && <p className="mb-5 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error.replaceAll("+", " ")}</p>}
+    {notice && <p className="mb-5 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{notice.replaceAll("+", " ")}</p>}
     {saved && <p className="mb-5 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">Progress saved.</p>}
+    {sent && <p className="mb-5 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">Verification code sent to the saved business phone.</p>}
   </>;
 }
 
@@ -54,7 +59,7 @@ function FileSummary({ file, optional = false }: { file?: VendorFileMetadata; op
 export default async function VendorOnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ step?: string; error?: string; saved?: string; submitted?: string }>;
+  searchParams: Promise<{ step?: string; error?: string; notice?: string; saved?: string; sent?: string; submitted?: string }>;
 }) {
   const query = await searchParams;
   const user = await requireUser("VENDOR_OWNER", { returnTo: "/cleaner/onboarding" });
@@ -97,9 +102,9 @@ export default async function VendorOnboardingPage({
       <div className="page-header"><div><p className="eyebrow">Vendor onboarding</p><h1 className="page-title">Set up your laundry business</h1><p className="page-copy">Complete each section, review the details, then submit the business for verification.</p></div><span className="badge border-zinc-200 bg-white text-zinc-600">Draft</span></div>
       {cleaner.verification_status === "needs_changes" && <p className="mb-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Your submission needs changes. Update the information below and submit it again for verification.</p>}
       <OnboardingStepper current={step} completedThrough={savedStep} />
-      <StatusNotice error={query.error} saved={query.saved} />
+      <StatusNotice error={query.error} notice={query.notice} saved={query.saved} sent={query.sent} />
 
-      {step === "business" && <form action={saveBusinessOnboardingAction} className="surface mx-auto max-w-4xl p-5 sm:p-8">
+      {step === "business" && <><form action={saveBusinessOnboardingAction} className="surface mx-auto max-w-4xl p-5 sm:p-8">
         <div className="mb-6"><h2 className="section-title">Business</h2><p className="mt-1 text-sm text-zinc-500">The identity customers will see after your business is approved.</p></div>
         <div className="form-grid two">
           <label><span className="field-label">Business name</span><input className="field" name="business_name" defaultValue={cleaner.business_name} maxLength={120} required /></label>
@@ -111,7 +116,14 @@ export default async function VendorOnboardingPage({
           <label><span className="field-label">Cover image</span><input className="field" name="cover" type="file" accept="image/jpeg,image/png,image/webp" required={!cover} /><FileSummary file={cover} /></label>
           <SubmitButton pendingLabel="Saving business..." className="btn-primary sm:col-span-2">Save and continue</SubmitButton>
         </div>
-      </form>}
+      </form>
+      <section className="surface mx-auto mt-5 max-w-4xl p-5 sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div><h3 className="font-extrabold text-brand-navy">Business phone verification</h3><p className="mt-1 text-sm text-zinc-600">{businessPhoneIsVerified(cleaner) ? `${cleaner.phone} is verified.` : `Save the business details, then verify ${cleaner.phone}. A different number needs its own verification.`}</p></div>
+          {!businessPhoneIsVerified(cleaner) && <form action={sendOnboardingBusinessPhoneVerificationAction}><SubmitButton className="btn-secondary" pendingLabel="Sending code...">Send code</SubmitButton></form>}
+        </div>
+        {!businessPhoneIsVerified(cleaner) && <form action={verifyOnboardingBusinessPhoneAction} className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]"><label><span className="field-label">Verification code</span><input className="field" name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" required /></label><SubmitButton className="btn-primary self-end" pendingLabel="Verifying...">Verify business phone</SubmitButton></form>}
+      </section></>}
 
       {step === "location" && <form action={saveLocationOnboardingAction} className="surface mx-auto max-w-4xl p-5 sm:p-8">
         <div className="mb-6"><h2 className="section-title">Location and coverage</h2><p className="mt-1 text-sm text-zinc-500">Define the service base and how far pickup and delivery can travel.</p></div>
@@ -148,7 +160,7 @@ export default async function VendorOnboardingPage({
 
       {step === "verification" && <form action={saveVerificationOnboardingAction} className="surface mx-auto max-w-4xl p-5 sm:p-8">
         <div className="mb-6"><h2 className="section-title">Verification and payout</h2><p className="mt-1 text-sm text-zinc-500">Sensitive numbers are encrypted. Documents remain private to your business and authorized reviewers.</p></div>
-        <div className="mb-6 flex items-center gap-3 rounded-md border border-teal-200 bg-teal-50 p-4 text-sm text-teal-800"><CheckCircle2 size={20} /><span><strong>Phone verified</strong><span className="block text-xs">{user.phone}</span></span></div>
+        <div className="mb-6 grid gap-3 sm:grid-cols-2"><div className="flex items-center gap-3 rounded-md border border-teal-200 bg-teal-50 p-4 text-sm text-teal-800"><CheckCircle2 size={20} /><span><strong>Account phone verified</strong><span className="block text-xs">{user.phone}</span></span></div><div className={`flex items-center gap-3 rounded-md border p-4 text-sm ${businessPhoneIsVerified(cleaner) ? "border-teal-200 bg-teal-50 text-teal-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}><CheckCircle2 size={20} /><span><strong>{businessPhoneIsVerified(cleaner) ? "Business phone verified" : "Business phone needs verification"}</strong><span className="block text-xs">{cleaner.phone}</span></span></div></div>
         <div className="form-grid two">
           <label><span className="field-label">Identity type</span><select className="field" name="identity_type" defaultValue={verification?.identity_type ?? "nin"}><option value="nin">National Identity Number (NIN)</option><option value="drivers_license">Driver&apos;s licence</option><option value="passport">International passport</option><option value="voters_card">Voter&apos;s card</option></select></label>
           <label><span className="field-label">Identity number</span><input className="field" name="identity_number" maxLength={40} placeholder={verification?.identity_number_encrypted ? "Leave blank to keep saved value" : "Enter identity number"} required={!verification?.identity_number_encrypted} /></label>

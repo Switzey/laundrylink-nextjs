@@ -7,6 +7,7 @@ import type { NextResponse } from "next/server";
 import { all, now, one, run } from "@/lib/db";
 import { appConfig } from "@/lib/env";
 import { authPath, sanitizeReturnTo } from "@/lib/auth-intent";
+import { verifiedPhoneMatches } from "@/lib/phone-numbers";
 import { ROLES, roleRequiresPhoneVerification, type Role, type User } from "@/lib/types";
 
 function hashToken(token: string) {
@@ -81,7 +82,7 @@ export async function getCurrentUser(): Promise<User | null> {
 
   await run("DELETE FROM js_sessions WHERE expires_at <= ?", new Date().toISOString());
   const user = await one<Omit<User, "role"> & { role: string }>(
-    `SELECT u.id, u.name, u.email, u.role, u.phone, u.address, u.email_verified_at, u.phone_verified_at
+    `SELECT u.id, u.name, u.email, u.role, u.phone, u.phone_verified_e164, u.address, u.email_verified_at, u.phone_verified_at
      FROM js_sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ? AND s.expires_at > ?`,
     hashToken(token), new Date().toISOString(),
@@ -106,7 +107,7 @@ export async function requireUser(
   const allowedRoles = roles ? (Array.isArray(roles) ? roles : [roles]) : null;
   if (allowedRoles && !allowedRoles.includes(user.role)) redirect("/dashboard");
   if (!options.allowUnverified && !user.email_verified_at) redirect(authPath("/verify-email", options.returnTo));
-  if (!options.allowUnverified && roleRequiresPhoneVerification(user.role) && !user.phone_verified_at) {
+  if (!options.allowUnverified && roleRequiresPhoneVerification(user.role) && !userPhoneIsVerified(user)) {
     redirect(authPath("/verify-phone", options.returnTo));
   }
   return user;
@@ -131,10 +132,14 @@ export function dashboardForRole(role: Role) {
   return "/customer/dashboard";
 }
 
+export function userPhoneIsVerified(user: Pick<User, "phone" | "phone_verified_at" | "phone_verified_e164">) {
+  return verifiedPhoneMatches(user.phone, user.phone_verified_e164, user.phone_verified_at);
+}
+
 export function destinationForUser(user: User, returnTo?: unknown) {
   const intendedPath = sanitizeReturnTo(returnTo);
   if (!user.email_verified_at) return authPath("/verify-email", intendedPath);
-  if (roleRequiresPhoneVerification(user.role) && !user.phone_verified_at) {
+  if (roleRequiresPhoneVerification(user.role) && !userPhoneIsVerified(user)) {
     return authPath("/verify-phone", intendedPath);
   }
   return intendedPath ?? dashboardForRole(user.role);

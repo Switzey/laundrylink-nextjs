@@ -77,6 +77,7 @@ const tableOrder = [
   "oauth_accounts",
   "auth_tokens",
   "vendor_memberships",
+  "phone_verification_attempts",
   "vendor_verifications",
   "vendor_files",
 ];

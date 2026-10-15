@@ -28,6 +28,7 @@ export interface User {
   email: string;
   role: Role;
   phone: string | null;
+  phone_verified_e164: string | null;
   address: string | null;
   email_verified_at: string | null;
   phone_verified_at: string | null;
@@ -41,11 +42,15 @@ export interface Cleaner {
   address: string;
   city: string;
   phone: string;
+  business_phone_verified_at: string | null;
+  business_phone_verified_e164: string | null;
   rating: number;
   turnaround_time: string | null;
   opening_hours: string | null;
   is_available: number;
   is_approved: number;
+  is_published: number;
+  is_suspended: number;
   contact_name: string | null;
   business_email: string | null;
   state: string | null;
@@ -60,6 +65,8 @@ export interface Cleaner {
   submitted_at: string | null;
   approved_at: string | null;
   services_count?: number;
+  active_service_count?: number;
+  is_bookable?: number;
   reviews_count?: number;
   logo_file_id?: number | null;
   cover_file_id?: number | null;

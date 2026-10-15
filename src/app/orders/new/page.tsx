@@ -17,11 +17,16 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
   const { cleaner: cleanerParam, error, resume } = await searchParams;
   const user = await getCurrentUser();
   if (user && user.role !== "CUSTOMER") redirect(dashboardForRole(user.role));
-  const cleaners = await all<Cleaner>("SELECT * FROM cleaners WHERE is_approved = 1 AND is_available = 1 ORDER BY business_name");
+  const cleaners = await all<Cleaner>(`SELECT c.* FROM cleaners c
+    JOIN vendor_eligibility ve ON ve.cleaner_id = c.id
+    WHERE ve.bookable = 1 ORDER BY c.business_name`);
   const parsedCleanerId = Number(cleanerParam ?? 0);
   const cleanerId = Number.isSafeInteger(parsedCleanerId) && parsedCleanerId > 0 ? parsedCleanerId : 0;
-  const selectedCleaner = cleanerId ? await one<Cleaner>("SELECT * FROM cleaners WHERE id = ? AND is_approved = 1 AND is_available = 1", cleanerId) : null;
-  const services = selectedCleaner ? await all<Service>("SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1 ORDER BY name", selectedCleaner.id) : [];
+  const selectedCleaner = cleanerId ? await one<Cleaner>(`SELECT c.* FROM cleaners c
+    JOIN vendor_eligibility ve ON ve.cleaner_id = c.id
+    WHERE c.id = ? AND ve.bookable = 1`, cleanerId) : null;
+  const services = selectedCleaner ? await all<Service>(`SELECT * FROM services
+    WHERE cleaner_id = ? AND is_active = 1 AND price > 0 AND price <= 10000000 ORDER BY name`, selectedCleaner.id) : [];
   const addresses = user ? await all<Address>("SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, label", user.id) : [];
   const returnTo = selectedCleaner ? `/orders/new?cleaner=${selectedCleaner.id}&resume=1` : "/orders/new";
   const today = new Date().toISOString().slice(0, 10);

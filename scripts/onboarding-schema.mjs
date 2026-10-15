@@ -12,6 +12,10 @@ const cleanerColumns = [
   ["onboarding_step", "TEXT NOT NULL DEFAULT 'business'"],
   ["submitted_at", "TEXT"],
   ["approved_at", "TEXT"],
+  ["business_phone_verified_at", "TEXT"],
+  ["business_phone_verified_e164", "TEXT"],
+  ["is_published", "INTEGER NOT NULL DEFAULT 0"],
+  ["is_suspended", "INTEGER NOT NULL DEFAULT 0"],
 ];
 
 const serviceColumns = [

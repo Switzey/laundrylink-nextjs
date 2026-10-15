@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Clock3, MapPin, Star } from "lucide-react";
+import { CheckCircle2, Clock3, MapPin, PauseCircle, Star } from "lucide-react";
 import type { Cleaner } from "@/lib/types";
 
 export function CleanerCard({ cleaner }: { cleaner: Cleaner }) {
@@ -16,6 +16,7 @@ export function CleanerCard({ cleaner }: { cleaner: Cleaner }) {
         <div className="mt-4 grid gap-2 text-sm text-zinc-600">
           <span className="flex items-center gap-2"><MapPin size={16} className="text-brand-blue" />{cleaner.city}</span>
           <span className="flex items-center gap-2"><Clock3 size={16} className="text-brand-teal" />{cleaner.turnaround_time || "Flexible turnaround"}</span>
+          {cleaner.is_bookable ? <span className="flex items-center gap-2 font-semibold text-teal-700"><CheckCircle2 size={16} />Accepting orders</span> : <span className="flex items-center gap-2 font-semibold text-amber-700"><PauseCircle size={16} />Currently unavailable</span>}
         </div>
         <div className="mt-5 flex items-center justify-between border-t border-zinc-100 pt-4">
           <span className="text-xs font-semibold text-zinc-500">{cleaner.services_count ?? 0} services</span>

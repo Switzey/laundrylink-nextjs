@@ -9,11 +9,17 @@ import { authorizeAction } from "@/lib/authorization";
 import { destroySession } from "@/lib/auth";
 import { now, one, run, transaction } from "@/lib/db";
 import { appConfig } from "@/lib/env";
+import { normalizePhoneNumber } from "@/lib/phone-numbers";
+import { applyAccountPhoneChange } from "@/lib/phone-state";
+import { roleRequiresPhoneVerification } from "@/lib/types";
 import { optionalTextField, parseFormOrRedirect, positiveId, strongPassword, textField } from "@/lib/validation";
 
-const phoneField = optionalTextField(30).refine(
-  (value) => !value || /^[+0-9().\-\s]{7,30}$/.test(value),
-  "Enter a valid phone number.",
+const phoneField = z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+  z.string().trim().min(7).max(30)
+    .refine((value) => Boolean(normalizePhoneNumber(value)), "Enter a valid international phone number.")
+    .transform((value) => normalizePhoneNumber(value)!)
+    .optional(),
 );
 
 const addressSchema = z.object({
@@ -120,11 +126,11 @@ export async function deleteAddressAction(formData: FormData) {
 export async function updateProfileAction(formData: FormData) {
   const { user, context } = await authorizeAction({ action: "profile.update", rateLimit: { limit: 10, windowSeconds: 60 } });
   const input = parseFormOrRedirect(profileSchema, formData, "/profile", "Enter valid profile details.");
-  await transaction(async () => {
+  const phoneState = await transaction(async () => {
+    const state = await applyAccountPhoneChange(user.id, user.id, input.phone);
     await run(
-      "UPDATE users SET name = ?, phone = ?, address = ?, updated_at = ? WHERE id = ?",
+      "UPDATE users SET name = ?, address = ?, updated_at = ? WHERE id = ?",
       input.name,
-      input.phone ?? null,
       input.address ?? null,
       now(),
       user.id,
@@ -135,9 +141,14 @@ export async function updateProfileAction(formData: FormData) {
       targetType: "user",
       targetId: user.id,
       outcome: "succeeded",
+      metadata: { phoneChanged: state.changed, phoneVerificationRetained: Boolean(state.verifiedAt) },
       context,
     });
+    return state;
   });
+  if (roleRequiresPhoneVerification(user.role) && !phoneState.verifiedAt) {
+    redirect("/verify-phone?notice=Verify+your+new+phone+number+to+continue.");
+  }
   redirect("/profile?success=Profile+updated");
 }
 

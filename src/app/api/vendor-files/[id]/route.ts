@@ -11,7 +11,7 @@ type StoredFile = {
   kind: string;
   filename: string;
   media_type: string;
-  is_approved: number;
+  public_profile: number;
 };
 
 function fileBytes(contents: ArrayBuffer | Uint8Array) {
@@ -22,13 +22,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const id = Number((await params).id);
   if (!Number.isSafeInteger(id) || id <= 0) return new NextResponse("Not found", { status: 404 });
   const file = await one<StoredFile>(
-    `SELECT vf.id, vf.cleaner_id, vf.kind, vf.filename, vf.media_type, c.is_approved
-     FROM vendor_files vf JOIN cleaners c ON c.id = vf.cleaner_id WHERE vf.id = ?`,
+    `SELECT vf.id, vf.cleaner_id, vf.kind, vf.filename, vf.media_type,
+       COALESCE(ve.public_profile, 0) AS public_profile
+     FROM vendor_files vf
+     LEFT JOIN vendor_eligibility ve ON ve.cleaner_id = vf.cleaner_id
+     WHERE vf.id = ?`,
     id,
   );
   if (!file) return new NextResponse("Not found", { status: 404 });
 
-  const publicBranding = file.is_approved === 1 && (file.kind === "logo" || file.kind === "cover");
+  const publicBranding = file.public_profile === 1 && (file.kind === "logo" || file.kind === "cover");
   if (!publicBranding) {
     const user = await getCurrentUser();
     if (!user) return new NextResponse("Not found", { status: 404 });

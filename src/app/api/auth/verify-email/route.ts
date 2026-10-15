@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     );
   }
   const account = await one<Omit<User, "role"> & { role: string }>(
-    `SELECT id, name, email, role, phone, address, email_verified_at, phone_verified_at
+    `SELECT id, name, email, role, phone, phone_verified_e164, address, email_verified_at, phone_verified_at
      FROM users WHERE id = ?`,
     record.user_id,
   );

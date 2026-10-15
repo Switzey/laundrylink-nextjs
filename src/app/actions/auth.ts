@@ -7,16 +7,26 @@ import { writeAuditLog } from "@/lib/audit";
 import { sendAuthEmail } from "@/lib/auth-email";
 import { createAuthToken, findValidAuthToken } from "@/lib/auth-tokens";
 import { authorizeAction, authorizePublicAction } from "@/lib/authorization";
-import { createSession, destinationForUser, destroySession, normalizeRole } from "@/lib/auth";
+import { createSession, destinationForUser, destroySession, normalizeRole, userPhoneIsVerified } from "@/lib/auth";
 import { authPath, pathWithParams, sanitizeReturnTo } from "@/lib/auth-intent";
 import { now, one, run, transaction } from "@/lib/db";
 import { appConfig, emailDeliveryConfigured, phoneVerificationConfigured } from "@/lib/env";
-import { checkPhoneVerification, isE164Phone, sendPhoneVerification } from "@/lib/phone-verification";
+import { normalizePhoneNumber } from "@/lib/phone-numbers";
+import { beginPhoneVerification, completePhoneVerification } from "@/lib/phone-verification-attempts";
+import { applyAccountPhoneChange } from "@/lib/phone-state";
 import { RateLimitError } from "@/lib/rate-limit";
 import { roleRequiresPhoneVerification, type User } from "@/lib/types";
 import { emailAddress, optionalTextField, parseFormOrRedirect, strongPassword, textField } from "@/lib/validation";
 
 const INVALID_PASSWORD_HASH = "$2b$12$fhC/QXVkKWPYGt2UA9.R3e4WGHEySkl.1vXaYPfRVKCWKc4mXljpC";
+
+const normalizedPhone = z.string().trim().min(7).max(30)
+  .refine((value) => Boolean(normalizePhoneNumber(value)), "Enter a valid international phone number.")
+  .transform((value) => normalizePhoneNumber(value)!);
+const optionalNormalizedPhone = z.preprocess(
+  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+  normalizedPhone.optional(),
+);
 
 const loginSchema = z.object({ email: emailAddress, password: z.string().min(1).max(128) });
 const registerSchema = z.object({
@@ -25,13 +35,13 @@ const registerSchema = z.object({
   password: strongPassword,
   confirm_password: z.string().min(1).max(128),
   role: z.enum(["CUSTOMER", "VENDOR_OWNER"]),
-  phone: optionalTextField(30),
+  phone: optionalNormalizedPhone,
   address: optionalTextField(250),
 }).superRefine((input, context) => {
   if (input.password !== input.confirm_password) {
     context.addIssue({ code: "custom", path: ["confirm_password"], message: "The passwords do not match." });
   }
-  if (input.role === "VENDOR_OWNER" && (!input.phone || !isE164Phone(input.phone))) {
+  if (input.role === "VENDOR_OWNER" && !input.phone) {
     context.addIssue({ code: "custom", path: ["phone"], message: "Enter a phone number in international format, such as +2348012345678." });
   }
 });
@@ -45,7 +55,7 @@ const resetPasswordSchema = z.object({
   message: "The passwords do not match.",
 });
 const phoneSchema = z.object({
-  phone: z.string().trim().refine(isE164Phone, "Enter a valid international phone number."),
+  phone: normalizedPhone,
 });
 const phoneCodeSchema = z.object({ code: z.string().trim().regex(/^\d{4,10}$/, "Enter the verification code.") });
 
@@ -68,7 +78,7 @@ export async function loginAction(formData: FormData) {
   const { email, password } = parseFormOrRedirect(loginSchema, formData, loginPath, "Enter a valid email and password.");
   const context = await authorizeAuthenticationAttempt("auth.login", email, loginPath, 5, 60);
   const account = await one<Omit<User, "role"> & { role: string; password: string }>(
-    `SELECT id, name, email, role, phone, address, email_verified_at, phone_verified_at, password
+    `SELECT id, name, email, role, phone, phone_verified_e164, address, email_verified_at, phone_verified_at, password
      FROM users WHERE lower(email) = ?`,
     email,
   );
@@ -123,7 +133,7 @@ export async function registerAction(formData: FormData) {
       const cleaner = await run(
         `INSERT INTO cleaners
           (user_id, business_name, description, address, city, phone, rating, turnaround_time, opening_hours, is_available, is_approved, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 1, 0, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 0, 0, ?, ?)`,
         id, `${input.name} Laundry`, "Tell customers what makes your laundry service special.", input.address ?? "Address not set",
         "Lagos", input.phone!, "24 - 48 hours", "Mon - Sat, 8am - 6pm", timestamp, timestamp,
       );
@@ -197,15 +207,18 @@ export async function sendPhoneVerificationAction(formData: FormData) {
   const { user, context } = await authorizeAction({ action: "auth.phone_send", rateLimit: { limit: 3, windowSeconds: 900 }, allowUnverified: true, returnTo: returnTo ?? undefined });
   if (!user.email_verified_at) redirect(authPath("/verify-email", returnTo));
   if (!roleRequiresPhoneVerification(user.role)) redirect(destinationForUser(user, returnTo));
-  if (!phoneVerificationConfigured()) fail(phonePath, "Phone verification is temporarily unavailable.");
   const { phone } = parseFormOrRedirect(phoneSchema, formData, phonePath, "Enter a valid international phone number.");
-  const delivered = await sendPhoneVerification(phone);
-  if (!delivered) {
+  if (userPhoneIsVerified(user) && normalizePhoneNumber(user.phone) === phone) {
+    redirect(destinationForUser(user, returnTo));
+  }
+  if (!phoneVerificationConfigured()) fail(phonePath, "Phone verification is temporarily unavailable.");
+  const change = await transaction(() => applyAccountPhoneChange(user.id, user.id, phone));
+  const delivery = await beginPhoneVerification({ purpose: "account", userId: user.id });
+  if (delivery.status !== "sent") {
     await writeAuditLog({ actorUserId: user.id, action: "auth.phone_send", outcome: "failed", context });
     fail(phonePath, "We could not send a code to that number. Check it and try again.");
   }
-  await run("UPDATE users SET phone = ?, phone_verified_at = NULL, updated_at = ? WHERE id = ?", phone, now(), user.id);
-  await writeAuditLog({ actorUserId: user.id, action: "auth.phone_send", outcome: "succeeded", context });
+  await writeAuditLog({ actorUserId: user.id, action: "auth.phone_send", outcome: "succeeded", metadata: { phoneChanged: change.changed }, context });
   redirect(authPath("/verify-phone", returnTo, { sent: "1" }));
 }
 
@@ -215,15 +228,24 @@ export async function verifyPhoneAction(formData: FormData) {
   const { user, context } = await authorizeAction({ action: "auth.phone_verify", rateLimit: { limit: 5, windowSeconds: 900 }, allowUnverified: true, returnTo: returnTo ?? undefined });
   if (!user.email_verified_at) redirect(authPath("/verify-email", returnTo));
   if (!roleRequiresPhoneVerification(user.role)) redirect(destinationForUser(user, returnTo));
-  if (!user.phone || !isE164Phone(user.phone)) fail(phonePath, "Send a code to a valid phone number first.");
+  if (userPhoneIsVerified(user)) redirect(destinationForUser(user, returnTo));
+  if (!user.phone || !normalizePhoneNumber(user.phone)) fail(phonePath, "Send a code to a valid phone number first.");
+  if (!phoneVerificationConfigured()) fail(phonePath, "Phone verification is temporarily unavailable.");
   const { code } = parseFormOrRedirect(phoneCodeSchema, formData, phonePath, "Enter the verification code.");
-  if (!await checkPhoneVerification(user.phone, code)) {
+  const verification = await completePhoneVerification({ purpose: "account", userId: user.id }, code);
+  if (verification.status !== "approved") {
     await writeAuditLog({ actorUserId: user.id, action: "auth.phone_verify", outcome: "failed", context });
-    fail(phonePath, "That code is incorrect or expired.");
+    fail(phonePath, verification.status === "target_changed"
+      ? "The phone number changed. Send a fresh verification code."
+      : "That code is incorrect, expired, or no longer active.");
   }
-  await run("UPDATE users SET phone_verified_at = ?, updated_at = ? WHERE id = ?", now(), now(), user.id);
   await writeAuditLog({ actorUserId: user.id, action: "auth.phone_verify", outcome: "succeeded", context });
-  redirect(destinationForUser({ ...user, phone_verified_at: now() }, returnTo));
+  redirect(destinationForUser({
+    ...user,
+    phone: verification.phone,
+    phone_verified_at: verification.verifiedAt,
+    phone_verified_e164: verification.phone,
+  }, returnTo));
 }
 
 export async function logoutAction() {

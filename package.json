@@ -2,11 +2,18 @@
   "name": "laundrylink-next",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
+  "packageManager": "npm@11.13.0",
   "scripts": {
     "db:setup": "node scripts/setup-database.mjs",
     "db:setup:turso": "node scripts/setup-turso.mjs",
     "db:migrate:security": "node scripts/migrate-security.mjs",
     "db:migrate:onboarding": "node scripts/migrate-onboarding.mjs",
+    "db:migrate:phone": "node scripts/migrate-phone-verification.mjs",
+    "db:audit:phone": "node scripts/audit-phone-verification.mjs",
+    "db:check-migrations": "node scripts/check-migration-compatibility.mjs",
     "user:set-password": "node scripts/set-user-password.mjs",
     "predev": "node scripts/setup-database.mjs",
     "dev": "next dev",
@@ -14,17 +21,20 @@
     "build": "next build",
     "prestart": "node scripts/setup-database.mjs",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint src scripts tests types next.config.ts eslint.config.mjs",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "production:check": "node scripts/check-production-readiness.mjs",
     "security:audit": "npm audit --omit=dev --audit-level=moderate",
     "security:audit:all": "npm audit --audit-level=moderate",
-    "check": "npm run typecheck && npm run lint && npm run security:audit && npm run build"
+    "check": "npm run typecheck && npm run lint && npm test && npm run security:audit && npm run build"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "jose": "^6.2.12",
+    "libphonenumber-js": "^1.13.15",
     "lucide-react": "^1.49.0",
     "next": "^16.3.8",
     "react": "19.3.0",
@@ -39,6 +49,7 @@
     "eslint": "^9",
     "eslint-config-next": "^16.3.8",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

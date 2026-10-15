@@ -7,11 +7,11 @@ import type { Cleaner } from "@/lib/types";
 
 export default async function HomePage() {
   const featured = await all<Cleaner>(
-    `SELECT c.*, COUNT(DISTINCT s.id) AS services_count, COUNT(DISTINCT r.id) AS reviews_count
-     FROM cleaners c
-     LEFT JOIN services s ON s.cleaner_id = c.id AND s.is_active = 1
+    `SELECT c.*, ve.active_service_count AS services_count, ve.bookable AS is_bookable,
+       COUNT(DISTINCT r.id) AS reviews_count
+     FROM cleaners c JOIN vendor_eligibility ve ON ve.cleaner_id = c.id
      LEFT JOIN reviews r ON r.cleaner_id = c.id
-     WHERE c.is_approved = 1 AND c.is_available = 1
+     WHERE ve.public_profile = 1
      GROUP BY c.id ORDER BY c.rating DESC, c.business_name LIMIT 3`,
   );
 

@@ -3,10 +3,6 @@ import "server-only";
 import { appConfig, phoneVerificationConfigured } from "@/lib/env";
 import { logError, logWarning } from "@/lib/logger";
 
-export function isE164Phone(value: string) {
-  return /^\+[1-9]\d{7,14}$/.test(value);
-}
-
 async function twilioRequest(path: string, body: URLSearchParams) {
   if (!phoneVerificationConfigured()) return null;
   const credentials = Buffer.from(
@@ -35,10 +31,10 @@ export async function sendPhoneVerification(phone: string) {
   const response = await twilioRequest("Verifications", new URLSearchParams({ To: phone, Channel: "sms" }));
   if (!response?.ok) {
     logWarning("auth.phone_send_failed", { status: response?.status ?? 0 });
-    return false;
+    return null;
   }
-  const payload = await response.json() as { status?: string };
-  return payload.status === "pending";
+  const payload = await response.json() as { sid?: string; status?: string };
+  return payload.status === "pending" && payload.sid ? { sid: payload.sid } : null;
 }
 
 export async function checkPhoneVerification(phone: string, code: string) {
@@ -48,8 +44,8 @@ export async function checkPhoneVerification(phone: string, code: string) {
   );
   if (!response?.ok) {
     logWarning("auth.phone_check_failed", { status: response?.status ?? 0 });
-    return false;
+    return { approved: false, sid: null };
   }
-  const payload = await response.json() as { status?: string };
-  return payload.status === "approved";
+  const payload = await response.json() as { sid?: string; status?: string };
+  return { approved: payload.status === "approved", sid: payload.sid ?? null };
 }

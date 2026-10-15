@@ -8,13 +8,20 @@ import { getAllAdmins } from "@/lib/auth";
 import { authorizeAction } from "@/lib/authorization";
 import { pathWithParams } from "@/lib/auth-intent";
 import { all, now, one, run, transaction } from "@/lib/db";
+import { phoneVerificationConfigured } from "@/lib/env";
+import { normalizePhoneNumber } from "@/lib/phone-numbers";
+import { beginPhoneVerification, completePhoneVerification } from "@/lib/phone-verification-attempts";
+import { applyBusinessPhoneChange, businessPhoneIsVerified } from "@/lib/phone-state";
 import { encryptSensitiveValue } from "@/lib/sensitive-data";
 import type { Cleaner, VendorVerification } from "@/lib/types";
 import { boundedMoney, emailAddress, optionalTextField, parseFormOrRedirect, positiveId, textField } from "@/lib/validation";
 import { prepareVendorFile, saveVendorFile, type VendorFileKind } from "@/lib/vendor-files";
+import { getVendorEligibility } from "@/lib/vendor-eligibility";
 
 const ONBOARDING_PATH = "/cleaner/onboarding";
-const phone = textField(7, 30).refine((value) => /^[+0-9().\-\s]{7,30}$/.test(value), "Enter a valid phone number.");
+const phone = textField(7, 30)
+  .refine((value) => Boolean(normalizePhoneNumber(value)), "Enter a valid international phone number.")
+  .transform((value) => normalizePhoneNumber(value)!);
 const optionalCoordinate = (minimum: number, maximum: number) => z.preprocess(
   (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
   z.coerce.number().min(minimum).max(maximum).optional(),
@@ -68,6 +75,7 @@ const verificationSchema = z.object({
 });
 
 const serviceIdSchema = z.object({ service_id: positiveId });
+const phoneCodeSchema = z.object({ code: z.string().trim().regex(/^\d{4,10}$/, "Enter the verification code.") });
 const submitSchema = z.object({ confirmation: z.literal("on", { error: "Confirm the submission before continuing." }) });
 
 function stepPath(step: string, params: Record<string, string | null | undefined> = {}) {
@@ -114,13 +122,13 @@ export async function saveBusinessOnboardingAction(formData: FormData) {
   if (!logo && !kinds.has("logo")) redirect(pathWithParams(returnPath, { error: "Add a business logo." }));
   if (!cover && !kinds.has("cover")) redirect(pathWithParams(returnPath, { error: "Add a cover image." }));
 
-  await transaction(async () => {
+  const businessPhone = await transaction(async () => {
+    const phoneState = await applyBusinessPhoneChange(user.id, cleaner.id, input.business_phone);
     await run(
-      `UPDATE cleaners SET business_name = ?, contact_name = ?, phone = ?, business_email = ?,
+      `UPDATE cleaners SET business_name = ?, contact_name = ?, business_email = ?,
        description = ?, onboarding_step = 'location', updated_at = ? WHERE id = ?`,
       input.business_name,
       input.contact_name,
-      input.business_phone,
       input.business_email,
       input.description,
       now(),
@@ -128,8 +136,36 @@ export async function saveBusinessOnboardingAction(formData: FormData) {
     );
     if (logo) await saveVendorFile(cleaner.id, logo);
     if (cover) await saveVendorFile(cleaner.id, cover);
-    await writeAuditLog({ actorUserId: user.id, action: "onboarding.business_update", targetType: "cleaner", targetId: cleaner.id, outcome: "succeeded", context });
+    await writeAuditLog({ actorUserId: user.id, action: "onboarding.business_update", targetType: "cleaner", targetId: cleaner.id, outcome: "succeeded", metadata: { phoneChanged: phoneState.changed, businessPhoneVerified: phoneState.verified }, context });
+    return phoneState;
   });
+  if (!businessPhone.verified) {
+    redirect(stepPath("business", { saved: "1", notice: "Verify the business phone before continuing." }));
+  }
+  redirect(stepPath("location", { saved: "1" }));
+}
+
+export async function sendOnboardingBusinessPhoneVerificationAction() {
+  const returnPath = stepPath("business");
+  const { user, context, cleaner } = await onboardingContext("onboarding.business_phone_send");
+  ensureEditable(cleaner);
+  if (businessPhoneIsVerified(cleaner)) redirect(stepPath("location"));
+  if (!phoneVerificationConfigured()) redirect(pathWithParams(returnPath, { error: "Phone verification is temporarily unavailable." }));
+  const result = await beginPhoneVerification({ purpose: "vendor_business", userId: user.id, cleanerId: cleaner.id });
+  await writeAuditLog({ actorUserId: user.id, action: "onboarding.business_phone_send", targetType: "cleaner", targetId: cleaner.id, outcome: result.status === "sent" ? "succeeded" : "failed", context });
+  if (result.status !== "sent") redirect(pathWithParams(returnPath, { error: "We could not send a code to the saved business phone." }));
+  redirect(stepPath("business", { sent: "1" }));
+}
+
+export async function verifyOnboardingBusinessPhoneAction(formData: FormData) {
+  const returnPath = stepPath("business");
+  const { user, context, cleaner } = await onboardingContext("onboarding.business_phone_verify");
+  ensureEditable(cleaner);
+  if (!phoneVerificationConfigured()) redirect(pathWithParams(returnPath, { error: "Phone verification is temporarily unavailable." }));
+  const { code } = parseFormOrRedirect(phoneCodeSchema, formData, returnPath, "Enter the verification code.");
+  const result = await completePhoneVerification({ purpose: "vendor_business", userId: user.id, cleanerId: cleaner.id }, code);
+  await writeAuditLog({ actorUserId: user.id, action: "onboarding.business_phone_verify", targetType: "cleaner", targetId: cleaner.id, outcome: result.status === "approved" ? "succeeded" : "failed", context });
+  if (result.status !== "approved") redirect(pathWithParams(returnPath, { error: "That code is incorrect, expired, or no longer matches this business phone." }));
   redirect(stepPath("location", { saved: "1" }));
 }
 
@@ -215,8 +251,8 @@ export async function deleteOnboardingServiceAction(formData: FormData) {
 export async function continueOnboardingServicesAction() {
   const { cleaner } = await onboardingContext("onboarding.services_continue");
   ensureEditable(cleaner);
-  const serviceCount = (await one<{ count: number }>("SELECT COUNT(1) AS count FROM services WHERE cleaner_id = ?", cleaner.id))?.count ?? 0;
-  if (!serviceCount) redirect(stepPath("services", { error: "Add at least one service before continuing." }));
+  const eligibility = await getVendorEligibility(cleaner.id);
+  if (!eligibility?.activeServiceCount) redirect(stepPath("services", { error: "Activate at least one correctly priced service before continuing." }));
   await run("UPDATE cleaners SET onboarding_step = 'verification', updated_at = ? WHERE id = ?", now(), cleaner.id);
   redirect(stepPath("verification"));
 }
@@ -279,29 +315,17 @@ export async function submitVendorOnboardingAction(formData: FormData) {
   ensureEditable(cleaner);
   parseFormOrRedirect(submitSchema, formData, returnPath, "Confirm the submission before continuing.");
 
-  const [services, verification, files] = await Promise.all([
-    one<{ count: number }>("SELECT COUNT(1) AS count FROM services WHERE cleaner_id = ?", cleaner.id),
-    one<VendorVerification>("SELECT * FROM vendor_verifications WHERE cleaner_id = ?", cleaner.id),
-    all<{ kind: string }>("SELECT kind FROM vendor_files WHERE cleaner_id = ?", cleaner.id),
-  ]);
-  const fileKinds = new Set(files.map((file) => file.kind));
-  const businessComplete = Boolean(cleaner.business_name && cleaner.contact_name && cleaner.business_email && cleaner.description && fileKinds.has("logo") && fileKinds.has("cover"));
-  const locationComplete = Boolean(cleaner.state && cleaner.lga && cleaner.area && cleaner.address && cleaner.pickup_radius_km && cleaner.delivery_radius_km);
-  const verificationComplete = Boolean(
-    user.phone_verified_at && verification?.identity_type && verification.identity_number_encrypted &&
-    verification.bank_name && verification.bank_account_name && verification.bank_account_number_encrypted &&
-    verification.information_confirmed && fileKinds.has("identity_document"),
-  );
-  if (!businessComplete) redirect(stepPath("business", { error: "Complete the business section before submitting." }));
-  if (!locationComplete) redirect(stepPath("location", { error: "Complete the location section before submitting." }));
-  if (!services?.count) redirect(stepPath("services", { error: "Add at least one service before submitting." }));
-  if (!verificationComplete) redirect(stepPath("verification", { error: "Complete verification before submitting." }));
+  const eligibility = await getVendorEligibility(cleaner.id);
+  if (!eligibility?.businessComplete) redirect(stepPath("business", { error: "Complete the business section before submitting." }));
+  if (!eligibility.locationValid) redirect(stepPath("location", { error: "Complete the location section before submitting." }));
+  if (!eligibility.activeServiceCount) redirect(stepPath("services", { error: "Activate at least one correctly priced service before submitting." }));
+  if (!eligibility.verificationComplete) redirect(stepPath("verification", { error: "Complete verification before submitting." }));
 
   await transaction(async () => {
     const timestamp = now();
     await run(
       `UPDATE cleaners SET verification_status = 'pending', onboarding_step = 'submitted', submitted_at = ?,
-       is_approved = 0, is_available = 0, updated_at = ? WHERE id = ?`,
+       is_approved = 0, is_published = 0, is_available = 0, updated_at = ? WHERE id = ?`,
       timestamp, timestamp, cleaner.id,
     );
     for (const admin of await getAllAdmins()) {

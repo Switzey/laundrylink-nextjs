@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
-import { Clock3, MapPin, Phone, Star } from "lucide-react";
+import { Clock3, MapPin, PauseCircle, Phone, Star } from "lucide-react";
 import { notFound } from "next/navigation";
 import { all, one } from "@/lib/db";
 import { money } from "@/lib/format";
 import type { Cleaner, Service } from "@/lib/types";
+import { getVendorEligibility } from "@/lib/vendor-eligibility";
+import { publicAvailabilityMessage, showPublicBookingAction } from "@/lib/vendor-eligibility-model";
 
 export const metadata: Metadata = { title: "Cleaner profile" };
 type Review = { id: number; rating: number; comment: string | null; customer_name: string | null; created_at: string };
@@ -15,13 +17,19 @@ export default async function CleanerDetailPage({ params }: { params: Promise<{ 
   const cleaner = await one<Cleaner>(`SELECT c.*,
     (SELECT id FROM vendor_files WHERE cleaner_id = c.id AND kind = 'logo') AS logo_file_id,
     (SELECT id FROM vendor_files WHERE cleaner_id = c.id AND kind = 'cover') AS cover_file_id
-    FROM cleaners c WHERE c.id = ? AND c.is_approved = 1`, id);
+    FROM cleaners c JOIN vendor_eligibility ve ON ve.cleaner_id = c.id
+    WHERE c.id = ? AND ve.public_profile = 1`, id);
   if (!cleaner) notFound();
-  const services = await all<Service>("SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1 ORDER BY name", id);
-  const reviews = await all<Review>(`SELECT r.*, u.name AS customer_name FROM reviews r LEFT JOIN users u ON u.id = r.customer_id WHERE r.cleaner_id = ? ORDER BY r.created_at DESC`, id);
+  const [services, reviews, eligibility] = await Promise.all([
+    all<Service>("SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1 AND price > 0 AND price <= 10000000 ORDER BY name", id),
+    all<Review>(`SELECT r.*, u.name AS customer_name FROM reviews r LEFT JOIN users u ON u.id = r.customer_id WHERE r.cleaner_id = ? ORDER BY r.created_at DESC`, id),
+    getVendorEligibility(id),
+  ]);
+  if (!eligibility?.publicProfile) notFound();
+  const availabilityMessage = publicAvailabilityMessage(eligibility);
   return (
     <div className="page">
-      <section className="surface overflow-hidden">{cleaner.cover_file_id && <div className="relative aspect-[5/1] min-h-40"><Image src={`/api/vendor-files/${cleaner.cover_file_id}`} alt={`${cleaner.business_name} storefront`} fill unoptimized className="object-cover" /></div>}<div className="grid gap-7 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-end"><div><div className="flex items-center gap-4">{cleaner.logo_file_id && <Image src={`/api/vendor-files/${cleaner.logo_file_id}`} alt={`${cleaner.business_name} logo`} width={68} height={68} unoptimized className="h-17 w-17 rounded-md border border-zinc-200 object-cover" />}<div><p className="eyebrow">Approved LaundryLink cleaner</p><h1 className="page-title">{cleaner.business_name}</h1></div></div><p className="page-copy">{cleaner.description}</p><div className="mt-5 flex flex-wrap gap-4 text-sm text-zinc-600"><span className="flex items-center gap-2"><MapPin size={17} className="text-brand-blue" />{cleaner.address}, {cleaner.city}</span><span className="flex items-center gap-2"><Clock3 size={17} className="text-brand-teal" />{cleaner.turnaround_time || "Flexible turnaround"}</span><span className="flex items-center gap-2"><Phone size={17} className="text-brand-blue" />{cleaner.phone}</span></div></div><div className="flex items-center gap-3"><span className="inline-flex items-center gap-1.5 text-lg font-bold text-amber-700"><Star size={20} fill="currentColor" />{Number(cleaner.rating).toFixed(1)}</span><Link className="btn-primary" href={`/orders/new?cleaner=${cleaner.id}`}>Book this cleaner</Link></div></div></section>
+      <section className="surface overflow-hidden">{cleaner.cover_file_id && <div className="relative aspect-[5/1] min-h-40"><Image src={`/api/vendor-files/${cleaner.cover_file_id}`} alt={`${cleaner.business_name} storefront`} fill unoptimized className="object-cover" /></div>}<div className="grid gap-7 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-end"><div><div className="flex items-center gap-4">{cleaner.logo_file_id && <Image src={`/api/vendor-files/${cleaner.logo_file_id}`} alt={`${cleaner.business_name} logo`} width={68} height={68} unoptimized className="h-17 w-17 rounded-md border border-zinc-200 object-cover" />}<div><p className="eyebrow">Approved LaundryLink cleaner</p><h1 className="page-title">{cleaner.business_name}</h1></div></div><p className="page-copy">{cleaner.description}</p><div className="mt-5 flex flex-wrap gap-4 text-sm text-zinc-600"><span className="flex items-center gap-2"><MapPin size={17} className="text-brand-blue" />{cleaner.address}, {cleaner.city}</span><span className="flex items-center gap-2"><Clock3 size={17} className="text-brand-teal" />{cleaner.turnaround_time || "Flexible turnaround"}</span><span className="flex items-center gap-2"><Phone size={17} className="text-brand-blue" />{cleaner.phone}</span></div></div><div className="flex max-w-sm flex-col items-start gap-3 lg:items-end"><span className="inline-flex items-center gap-1.5 text-lg font-bold text-amber-700"><Star size={20} fill="currentColor" />{Number(cleaner.rating).toFixed(1)}</span>{showPublicBookingAction(eligibility) ? <Link className="btn-primary" href={`/orders/new?cleaner=${cleaner.id}`}>Book this cleaner</Link> : <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800"><span className="mb-1 flex items-center gap-2 font-bold"><PauseCircle size={17} />Bookings paused</span>{availabilityMessage}</div>}</div></div></section>
       <div className="mt-7 grid gap-7 lg:grid-cols-[1.4fr_.6fr]"><section><h2 className="section-title">Services and pricing</h2><div className="mt-4 grid gap-3">{services.map((service) => <article className="surface flex items-start justify-between gap-4 p-5" key={service.id}><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold text-brand-navy">{service.name}</h3><span className="badge border-blue-200 bg-blue-50 text-blue-700">{service.category}</span></div><p className="mt-1 text-sm leading-6 text-zinc-600">{service.description}</p><p className="mt-2 text-xs font-semibold uppercase text-zinc-500">{service.unit.replaceAll("_", " ")} · {service.turnaround_time}{service.express_available ? " · express available" : ""}</p></div><strong className="whitespace-nowrap text-brand-blue">{money(service.price)}</strong></article>)}</div></section>
       <aside><h2 className="section-title">Customer reviews</h2><div className="mt-4 grid gap-3">{reviews.length ? reviews.slice(0,5).map((review) => <article className="surface p-4" key={review.id}><div className="flex items-center justify-between"><strong className="text-sm text-brand-navy">{review.customer_name || "Customer"}</strong><span className="text-sm font-bold text-amber-700">{review.rating}/5</span></div><p className="mt-2 text-sm leading-6 text-zinc-600">{review.comment || "A positive LaundryLink experience."}</p></article>) : <div className="surface p-5 text-sm text-zinc-500">No reviews yet.</div>}</div></aside></div>
     </div>

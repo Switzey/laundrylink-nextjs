@@ -4,8 +4,8 @@ LaundryLink is a full-stack TypeScript application built with the Next.js App Ro
 
 ## Requirements
 
-- Node.js 20.9 or newer
-- npm 10 or newer
+- Node.js 24.x
+- npm 11.x
 
 ## Local development
 
@@ -43,12 +43,38 @@ Authentication integrations are optional but must be configured before their flo
 
 Never commit provider credentials. Configure separate values for preview and production deployments. Email registration is closed when email delivery is unavailable, and vendor registration is also closed when phone verification is unavailable, so accounts cannot be created in an unverifiable state.
 
-Run the idempotent onboarding migration against each hosted database before deploying. It applies the onboarding schema first and then refreshes the security constraints:
+Run the idempotent onboarding migration against each hosted database before deploying. It applies the authentication and onboarding schemas before refreshing the security constraints:
 
 ```bash
 node --env-file=.env.staging.local scripts/migrate-onboarding.mjs
 node --env-file=.env.production.local scripts/migrate-onboarding.mjs
 ```
+
+The migration also refreshes the centralized `vendor_eligibility` database view. Verification approval, profile publication, and accepting new orders are intentionally separate states: approval never publishes a vendor automatically, and publication never makes an ineligible vendor bookable. Marketplace pages and order creation use the same eligibility view, while pausing or suspending a vendor preserves existing orders.
+
+Before deploying exact-number phone verification, audit each database and then run the dedicated migration:
+
+```bash
+node --env-file=.env.staging.local scripts/audit-phone-verification.mjs
+node --env-file=.env.staging.local scripts/migrate-phone-verification.mjs
+node --env-file=.env.production.local scripts/audit-phone-verification.mjs
+node --env-file=.env.production.local scripts/migrate-phone-verification.mjs
+```
+
+The migration normalizes valid numbers to E.164 but deliberately does not trust legacy verification timestamps that were not bound to an exact number. Phone-gated accounts must verify again, and affected vendors remain unavailable until their business phone is independently verified. Configure and test Twilio Verify before applying this migration to production.
+
+Before every hosted release, run the read-only readiness check with that environment's credentials:
+
+```bash
+node --env-file=.env.staging.local scripts/check-migration-compatibility.mjs
+node --env-file=.env.production.local scripts/check-migration-compatibility.mjs
+node --env-file=.env.staging.local scripts/check-production-readiness.mjs
+node --env-file=.env.production.local scripts/check-production-readiness.mjs
+```
+
+The compatibility command reads only hosted schema definitions, applies the migrations twice to a disposable local database, and checks required objects and foreign keys. The readiness command validates required secret formats, reports partially configured integrations, verifies database connectivity, and confirms that critical tables, columns, and security triggers exist. Neither command prints credential values. After deployment, monitor `GET /api/health`; it returns `200` only when the application can reach its database and returns a generic `503` otherwise.
+
+See [Deployment reconciliation](docs/deployment-reconciliation.md) for the current production branch, deployed commit, migration gates, and the non-deployment review process.
 
 An empty Turso database can be initialized with `npm run db:setup:turso`. The seeder creates sanitized demo data and refuses a custom seed containing users outside its explicit demo allowlist.
 
@@ -59,6 +85,8 @@ Rotate an account password from a trusted terminal by supplying `USER_EMAIL` and
 - Every Server Action authenticates and authorizes on the server. UI visibility is never treated as authorization.
 - Ownership-sensitive updates include the authenticated user or cleaner identity in their database predicates.
 - Opaque session tokens are stored only in secure HTTP-only cookies; only SHA-256 token hashes are stored in the database.
+- Account and vendor-business phone verification is bound to the exact E.164 number and Twilio verification SID. Changing a number invalidates open attempts and its verification binding without revoking the signed-in session needed to complete re-verification.
+- Vendor eligibility is evaluated centrally from approved verification, complete business and location data, valid active services, publication, suspension, and order-acceptance state. New-order creation rechecks those conditions inside its database transaction.
 - Google, Apple, and email/password identities all resolve to the same `users` table. Verified provider emails may link to an existing identity; provider subject identifiers are uniquely constrained.
 - Roles are `CUSTOMER`, `VENDOR_OWNER`, `VENDOR_MANAGER`, `VENDOR_STAFF`, `RIDER`, `SUPPORT_AGENT`, `ADMIN`, and `SUPER_ADMIN`. Protected pages and every mutation enforce role permissions on the server.
 - Server Actions enforce trusted origins, bounded request bodies, Zod input schemas, and persistent database-backed rate limits.

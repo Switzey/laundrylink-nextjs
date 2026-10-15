@@ -1,4 +1,5 @@
 import { createClient } from "@libsql/client";
+import { applyAuthSchemaToLibsql } from "./auth-schema.mjs";
 import { applyOnboardingSchemaToLibsql } from "./onboarding-schema.mjs";
 import { applySecuritySchemaToLibsql } from "./security-schema.mjs";
 
@@ -11,9 +12,10 @@ if (!url || (url.startsWith("libsql:") && !authToken)) {
 
 const client = createClient({ url, authToken });
 try {
+  await applyAuthSchemaToLibsql(client);
   await applyOnboardingSchemaToLibsql(client);
   await applySecuritySchemaToLibsql(client);
-  console.log("Vendor onboarding schema migration complete.");
+  console.log("Authentication, vendor onboarding, and security schema migration complete.");
 } finally {
   client.close();
 }

@@ -202,25 +202,48 @@ if (existingUsers > 0) {
 const timestamp = new Date().toISOString();
 const password = hashSync(process.env.DEMO_PASSWORD || "development-password", 12);
 const insertUser = db.prepare(`
-  INSERT INTO users (name, email, email_verified_at, password, role, phone, phone_verified_at, address, created_at, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO users (name, email, email_verified_at, password, role, phone, phone_verified_at, phone_verified_e164, address, created_at, updated_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 db.exec("BEGIN IMMEDIATE");
 try {
-  const adminId = Number(insertUser.run("Ada Admin", "admin@example.com", timestamp, password, "ADMIN", "08010000001", timestamp, "12 Marina Road, Lagos", timestamp, timestamp).lastInsertRowid);
-  const customerId = Number(insertUser.run("Tola Martins", "customer@example.com", timestamp, password, "CUSTOMER", "08020000001", timestamp, "14 Admiralty Way, Lekki", timestamp, timestamp).lastInsertRowid);
-  const cleanerUserId = Number(insertUser.run("Bisi Fresh", "cleaner@example.com", timestamp, password, "VENDOR_OWNER", "08030000001", timestamp, "8 Admiralty Road, Lagos", timestamp, timestamp).lastInsertRowid);
+  const adminId = Number(insertUser.run("Ada Admin", "admin@example.com", timestamp, password, "ADMIN", "+2348010000001", timestamp, "+2348010000001", "12 Marina Road, Lagos", timestamp, timestamp).lastInsertRowid);
+  const customerId = Number(insertUser.run("Tola Martins", "customer@example.com", timestamp, password, "CUSTOMER", "+2348020000001", timestamp, "+2348020000001", "14 Admiralty Way, Lekki", timestamp, timestamp).lastInsertRowid);
+  const cleanerUserId = Number(insertUser.run("Bisi Fresh", "cleaner@example.com", timestamp, password, "VENDOR_OWNER", "+2348030000001", timestamp, "+2348030000001", "8 Admiralty Road, Lagos", timestamp, timestamp).lastInsertRowid);
 
   db.prepare(`INSERT INTO addresses (user_id, label, address, city, phone, is_default, delivery_notes, created_at, updated_at) VALUES (?, 'Home', ?, 'Lagos', ?, 1, ?, ?, ?)`)
-    .run(customerId, "14 Admiralty Way, Lekki", "08020000001", "Call at the estate gate before arrival.", timestamp, timestamp);
+    .run(customerId, "14 Admiralty Way, Lekki", "+2348020000001", "Call at the estate gate before arrival.", timestamp, timestamp);
 
   const cleanerId = Number(db.prepare(`
-    INSERT INTO cleaners (user_id, business_name, description, address, city, phone, rating, turnaround_time, opening_hours, is_available, is_approved, created_at, updated_at)
-    VALUES (?, 'FreshFold Laundry', 'Neighborhood wash, fold, and dry-cleaning with careful packaging.', '8 Admiralty Road', 'Lagos', '08030000001', 4.8, '24-48 hours', 'Mon-Sat, 8am-6pm', 1, 1, ?, ?)
-  `).run(cleanerUserId, timestamp, timestamp).lastInsertRowid);
+    INSERT INTO cleaners
+      (user_id, business_name, description, address, city, phone, business_phone_verified_at,
+       business_phone_verified_e164, rating, turnaround_time, opening_hours, is_available,
+       is_approved, contact_name, business_email, state, lga, area, verification_status,
+       onboarding_step, submitted_at, approved_at, is_published, is_suspended, created_at, updated_at)
+    VALUES (?, 'FreshFold Laundry', 'Neighborhood wash, fold, and dry-cleaning with careful packaging.',
+      '8 Admiralty Road', 'Lagos', '+2348030000001', ?, '+2348030000001', 4.8, '24-48 hours',
+      'Mon-Sat, 8am-6pm', 1, 1, 'Bisi Fresh', 'freshfold@example.com', 'Lagos', 'Eti-Osa',
+      'Lekki', 'approved', 'submitted', ?, ?, 1, 0, ?, ?)
+  `).run(cleanerUserId, timestamp, timestamp, timestamp, timestamp, timestamp).lastInsertRowid);
 
   db.prepare(`INSERT INTO vendor_memberships (cleaner_id, user_id, role, created_at, updated_at) VALUES (?, ?, 'VENDOR_OWNER', ?, ?)`).run(cleanerId, cleanerUserId, timestamp, timestamp);
+
+  db.prepare(`
+    INSERT INTO vendor_verifications
+      (cleaner_id, identity_type, identity_number_encrypted, bank_name, bank_account_name,
+       bank_account_number_encrypted, information_confirmed, created_at, updated_at)
+    VALUES (?, 'nin', 'v1.demo-identity', 'Demo Bank', 'Bisi Fresh', 'v1.demo-account', 1, ?, ?)
+  `).run(cleanerId, timestamp, timestamp);
+
+  const insertVendorFile = db.prepare(`
+    INSERT INTO vendor_files
+      (cleaner_id, kind, filename, media_type, size, sha256, contents, created_at, updated_at)
+    VALUES (?, ?, ?, 'image/png', 4, ?, x'89504E47', ?, ?)
+  `);
+  insertVendorFile.run(cleanerId, "logo", "demo-logo.png", "a".repeat(64), timestamp, timestamp);
+  insertVendorFile.run(cleanerId, "cover", "demo-cover.png", "b".repeat(64), timestamp, timestamp);
+  insertVendorFile.run(cleanerId, "identity_document", "demo-identity.png", "c".repeat(64), timestamp, timestamp);
 
   const insertService = db.prepare(`INSERT INTO services (cleaner_id, name, description, price, unit, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`);
   insertService.run(cleanerId, "Shirt Laundry", "Washed, pressed, and folded shirts.", 1200, "per_item", timestamp, timestamp);

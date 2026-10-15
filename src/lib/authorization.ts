@@ -2,7 +2,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, userPhoneIsVerified } from "@/lib/auth";
 import { enforceRateLimit, type RateLimitRule } from "@/lib/rate-limit";
 import { assertTrustedMutation, opaqueIdentifier } from "@/lib/request-security";
 import { authPath } from "@/lib/auth-intent";
@@ -42,7 +42,7 @@ export async function authorizeAction(options: ProtectedActionOptions) {
   }
 
   if (!options.allowUnverified && !user.email_verified_at) redirect(authPath("/verify-email", options.returnTo));
-  if (!options.allowUnverified && roleRequiresPhoneVerification(user.role) && !user.phone_verified_at) {
+  if (!options.allowUnverified && roleRequiresPhoneVerification(user.role) && !userPhoneIsVerified(user)) {
     redirect(authPath("/verify-phone", options.returnTo));
   }
 
