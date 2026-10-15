@@ -45,6 +45,7 @@ The previous GitHub workflow tested Node 18, 20, and 22. Its recorded runs faile
 The reconciliation changes CI to:
 
 - Node 24.x, matching `package.json`.
+- Ubuntu 24.04, avoiding an unreviewed `ubuntu-latest` runner migration.
 - Current official `actions/checkout@v7` and `actions/setup-node@v7` releases.
 - One `npm run check` gate covering TypeScript, ESLint, automated tests, production dependency audit, and a production build.
 - Read-only repository permissions, concurrency cancellation, and a 20-minute timeout.
