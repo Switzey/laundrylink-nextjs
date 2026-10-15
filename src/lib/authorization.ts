@@ -6,6 +6,7 @@ import { getCurrentUser, userPhoneIsVerified } from "@/lib/auth";
 import { enforceRateLimit, type RateLimitRule } from "@/lib/rate-limit";
 import { assertTrustedMutation, opaqueIdentifier } from "@/lib/request-security";
 import { authPath } from "@/lib/auth-intent";
+import { roleIsAllowed } from "@/lib/access-policy";
 import { roleRequiresPhoneVerification, type Role, type User } from "@/lib/types";
 
 const DEFAULT_ACTION_LIMIT = { limit: 60, windowSeconds: 60 } satisfies RateLimitRule;
@@ -27,10 +28,7 @@ export async function authorizeAction(options: ProtectedActionOptions) {
     redirect(authPath("/login", options.returnTo, { error: "Please sign in to continue" }));
   }
 
-  const roles = options.roles
-    ? (Array.isArray(options.roles) ? options.roles : [options.roles])
-    : null;
-  if (roles && !roles.includes(user.role)) {
+  if (!roleIsAllowed(user.role, options.roles)) {
     await writeAuditLog({
       actorUserId: user.id,
       action: options.action,

@@ -21,9 +21,13 @@
     "build": "next build",
     "prestart": "node scripts/setup-database.mjs",
     "start": "next start",
-    "lint": "eslint src scripts tests types next.config.ts eslint.config.mjs",
+    "lint": "eslint src scripts tests types next.config.ts eslint.config.mjs vitest.config.mts playwright.config.ts",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "npm run test:unit",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "check:all": "npm run check && npm run test:e2e",
     "production:check": "node scripts/check-production-readiness.mjs",
     "security:audit": "npm audit --omit=dev --audit-level=moderate",
     "security:audit:all": "npm audit --audit-level=moderate",
@@ -42,14 +46,15 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^24.19.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "^16.3.8",
     "tailwindcss": "^4",
-    "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^5.0.4"
   }
 }

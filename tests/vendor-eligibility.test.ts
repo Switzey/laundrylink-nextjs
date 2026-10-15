@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { after, beforeEach, test } from "node:test";
+import { afterAll, beforeEach, test } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import {
   showPublicBookingAction,
@@ -74,7 +74,7 @@ beforeEach(() => {
   database.prepare("UPDATE services SET is_active = 1, price = 1200 WHERE cleaner_id = ?").run(cleaner.id);
 });
 
-after(() => {
+afterAll(() => {
   database.close();
   rmSync(directory, { recursive: true, force: true });
 });

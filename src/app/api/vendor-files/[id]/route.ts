@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cleanerIdForUser, getCurrentUser } from "@/lib/auth";
+import { canAccessVendorFile } from "@/lib/access-policy";
 import { one } from "@/lib/db";
-import { ADMIN_ROLES } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +32,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!file) return new NextResponse("Not found", { status: 404 });
 
   const publicBranding = file.public_profile === 1 && (file.kind === "logo" || file.kind === "cover");
-  if (!publicBranding) {
-    const user = await getCurrentUser();
-    if (!user) return new NextResponse("Not found", { status: 404 });
-    const ownsCleaner = await cleanerIdForUser(user.id) === file.cleaner_id;
-    if (!ownsCleaner && !ADMIN_ROLES.includes(user.role)) return new NextResponse("Not found", { status: 404 });
-  }
+  const user = publicBranding ? null : await getCurrentUser();
+  const requesterCleanerId = user ? await cleanerIdForUser(user.id) : null;
+  if (!canAccessVendorFile({
+    kind: file.kind,
+    publicProfile: file.public_profile === 1,
+    fileCleanerId: file.cleaner_id,
+    requesterCleanerId,
+    requesterRole: user?.role ?? null,
+  })) return new NextResponse("Not found", { status: 404 });
 
   const stored = await one<{ contents: ArrayBuffer | Uint8Array }>("SELECT contents FROM vendor_files WHERE id = ?", file.id);
   if (!stored) return new NextResponse("Not found", { status: 404 });

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { after, test } from "node:test";
+import { afterAll, test } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 
 const directory = mkdtempSync(path.join(tmpdir(), "laundrylink-phone-test-"));
@@ -16,7 +16,7 @@ const setup = spawnSync(process.execPath, ["scripts/setup-database.mjs"], {
 assert.equal(setup.status, 0, setup.stderr || setup.stdout);
 const database = new DatabaseSync(databasePath);
 
-after(() => {
+afterAll(() => {
   database.close();
   rmSync(directory, { recursive: true, force: true });
 });

@@ -2,72 +2,17 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { authorizeAction } from "@/lib/authorization";
 import { cleanerIdForUser } from "@/lib/auth";
 import { pathWithParams } from "@/lib/auth-intent";
-import { DELIVERY_FEE, PLATFORM_FEE, STATUS_FLOW, TIME_WINDOWS } from "@/lib/constants";
+import { DELIVERY_FEE, PLATFORM_FEE } from "@/lib/constants";
 import { all, now, one, run, transaction } from "@/lib/db";
-import { isoDate, optionalTextField, parseFormOrRedirect, positiveId } from "@/lib/validation";
+import { calculateOrderTotals, canTransitionOrder, customerCanRescheduleOrder, customerCanReviewOrder, parseServiceQuantity, vendorCanManageOrder } from "@/lib/order-policy";
+import { createOrderSchema, orderStatusSchema, rescheduleOrderSchema, reviewSchema } from "@/lib/order-validation";
+import { parseFormOrRedirect, positiveId } from "@/lib/validation";
 import { VENDOR_ROLES, type Service } from "@/lib/types";
 import { getVendorEligibility } from "@/lib/vendor-eligibility";
-
-const optionalDate = z.preprocess(
-  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
-  isoDate.optional(),
-);
-const optionalTimeWindow = z.preprocess(
-  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
-  z.enum(TIME_WINDOWS).optional(),
-);
-const optionalNonnegativeId = z.preprocess(
-  (value) => typeof value === "string" && value.trim() === "" ? 0 : value,
-  z.coerce.number().int().nonnegative(),
-);
-
-const scheduleFields = {
-  pickup_date: isoDate,
-  pickup_time_window: z.enum(TIME_WINDOWS),
-  delivery_date: optionalDate,
-  delivery_time_window: optionalTimeWindow,
-};
-
-const createOrderSchema = z.object({
-  cleaner_id: positiveId,
-  ...scheduleFields,
-  pickup_address_id: optionalNonnegativeId,
-  delivery_address_id: optionalNonnegativeId,
-  pickup_address: optionalTextField(250),
-  delivery_address: optionalTextField(250),
-  pickup_notes: optionalTextField(1000),
-  delivery_notes: optionalTextField(1000),
-  notes: optionalTextField(1000),
-}).superRefine((input, context) => {
-  if (input.delivery_date && input.delivery_date < input.pickup_date) {
-    context.addIssue({ code: "custom", path: ["delivery_date"], message: "Delivery cannot be before pickup." });
-  }
-  if (input.delivery_time_window && !input.delivery_date) {
-    context.addIssue({ code: "custom", path: ["delivery_date"], message: "Choose a delivery date with the delivery window." });
-  }
-});
-
-const statusSchema = z.object({
-  order_id: positiveId,
-  status: z.enum(["accepted", "picked_up", "in_cleaning", "ready", "out_for_delivery", "completed", "cancelled"]),
-});
-
-const rescheduleSchema = z.object({ order_id: positiveId, ...scheduleFields }).superRefine((input, context) => {
-  if (input.delivery_date && input.delivery_date < input.pickup_date) {
-    context.addIssue({ code: "custom", path: ["delivery_date"], message: "Delivery cannot be before pickup." });
-  }
-});
-
-const reviewSchema = z.object({
-  order_id: positiveId,
-  rating: z.coerce.number().int().min(1).max(5),
-  comment: optionalTextField(1000),
-});
 
 async function notify(userId: number, title: string, message: string, type: string, data: object) {
   await run(
@@ -120,12 +65,12 @@ export async function createOrderAction(formData: FormData) {
   );
   let invalidQuantity = false;
   const selected = availableServices.flatMap((service) => {
-    const parsed = z.coerce.number().int().min(0).max(100).safeParse(formData.get(`service_${service.id}`) ?? 0);
-    if (!parsed.success) {
+    const quantity = parseServiceQuantity(formData.get(`service_${service.id}`));
+    if (quantity === null) {
       invalidQuantity = true;
       return [];
     }
-    return parsed.data > 0 ? [{ service, quantity: parsed.data }] : [];
+    return quantity > 0 ? [{ service, quantity }] : [];
   });
   if (invalidQuantity || !selected.length) {
     redirect(pathWithParams(returnTo, { error: "Select valid service quantities" }));
@@ -168,8 +113,7 @@ export async function createOrderAction(formData: FormData) {
     if (currentSelected.length !== selectedQuantities.length) {
       return { error: "One or more selected services are no longer available." } as const;
     }
-    const subtotal = currentSelected.reduce((sum, item) => sum + Number(item.service.price) * item.quantity, 0);
-    const total = subtotal + DELIVERY_FEE + PLATFORM_FEE;
+    const { subtotal, total } = calculateOrderTotals(currentSelected.map((item) => ({ price: item.service.price, quantity: item.quantity })));
     const result = await run(
       `INSERT INTO orders
        (customer_id, cleaner_id, pickup_address, delivery_address, pickup_date, pickup_time_window, delivery_date, delivery_time_window, status, subtotal, delivery_fee, platform_fee, total, payment_status, pickup_notes, delivery_notes, notes, created_at, updated_at)
@@ -237,7 +181,7 @@ export async function createOrderAction(formData: FormData) {
 
 export async function updateOrderStatusAction(formData: FormData) {
   const { user, context } = await authorizeAction({ action: "order.status_update", roles: VENDOR_ROLES });
-  const input = parseFormOrRedirect(statusSchema, formData, "/cleaner/dashboard", "Choose a valid order status.");
+  const input = parseFormOrRedirect(orderStatusSchema, formData, "/cleaner/dashboard", "Choose a valid order status.");
   const cleanerId = await cleanerIdForUser(user.id);
   const order = await one<{
     id: number;
@@ -251,17 +195,18 @@ export async function updateOrderStatusAction(formData: FormData) {
      FROM orders o JOIN cleaners c ON c.id = o.cleaner_id WHERE o.id = ?`,
     input.order_id,
   );
-  if (!order || order.cleaner_id !== cleanerId || !order.is_approved) {
+  if (!order || !vendorCanManageOrder(order.cleaner_id, cleanerId, order.is_approved === 1)) {
     await writeAuditLog({ actorUserId: user.id, action: "order.status_update", targetType: "order", targetId: input.order_id, outcome: "denied", metadata: { reason: "ownership" }, context });
     redirect("/cleaner/dashboard?error=Order+access+denied");
   }
-  if (!(STATUS_FLOW[order.status] ?? []).includes(input.status)) {
+  if (!canTransitionOrder(order.status, input.status)) {
     await writeAuditLog({ actorUserId: user.id, action: "order.status_update", targetType: "order", targetId: input.order_id, outcome: "denied", metadata: { reason: "invalid_transition" }, context });
     redirect(`/orders/${input.order_id}?error=That+status+change+is+not+allowed`);
   }
 
   await transaction(async () => {
-    await run("UPDATE orders SET status = ?, updated_at = ? WHERE id = ? AND status = ?", input.status, now(), input.order_id, order.status);
+    const update = await run("UPDATE orders SET status = ?, updated_at = ? WHERE id = ? AND status = ?", input.status, now(), input.order_id, order.status);
+    if (!update.changes) return;
     const description = `${order.business_name} updated the order from ${order.status.replaceAll("_", " ")} to ${input.status.replaceAll("_", " ")}.`;
     await activity(input.order_id, user.id, "order_status_updated", description, { from: order.status, to: input.status });
     if (order.customer_id) {
@@ -281,13 +226,13 @@ export async function updateOrderStatusAction(formData: FormData) {
 
 export async function rescheduleOrderAction(formData: FormData) {
   const { user, context } = await authorizeAction({ action: "order.reschedule", roles: "CUSTOMER" });
-  const input = parseFormOrRedirect(rescheduleSchema, formData, "/customer/dashboard", "Choose a valid schedule.");
+  const input = parseFormOrRedirect(rescheduleOrderSchema, formData, "/customer/dashboard", "Choose a valid schedule.");
   const order = await one<{ id: number; customer_id: number; cleaner_user_id: number | null; status: string }>(
     `SELECT o.id, o.customer_id, o.status, c.user_id AS cleaner_user_id
      FROM orders o JOIN cleaners c ON c.id = o.cleaner_id WHERE o.id = ?`,
     input.order_id,
   );
-  if (!order || order.customer_id !== user.id || !["pending", "accepted"].includes(order.status)) {
+  if (!order || !customerCanRescheduleOrder(order.customer_id, user.id, order.status)) {
     await writeAuditLog({ actorUserId: user.id, action: "order.reschedule", targetType: "order", targetId: input.order_id, outcome: "denied", metadata: { reason: "ownership_or_state" }, context });
     redirect(`/orders/${input.order_id}?error=This+order+cannot+be+rescheduled`);
   }
@@ -323,7 +268,8 @@ export async function createReviewAction(formData: FormData) {
      FROM orders o JOIN cleaners c ON c.id = o.cleaner_id WHERE o.id = ?`,
     input.order_id,
   );
-  if (!order || order.customer_id !== user.id || order.status !== "completed" || await one("SELECT id FROM reviews WHERE order_id = ?", input.order_id)) {
+  const existingReview = order ? await one("SELECT id FROM reviews WHERE order_id = ?", input.order_id) : null;
+  if (!order || !customerCanReviewOrder(order.customer_id, user.id, order.status, Boolean(existingReview))) {
     await writeAuditLog({ actorUserId: user.id, action: "review.create", targetType: "order", targetId: input.order_id, outcome: "denied", metadata: { reason: "ownership_or_state" }, context });
     redirect(`/orders/${input.order_id}?error=This+order+cannot+be+reviewed`);
   }

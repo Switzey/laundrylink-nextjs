@@ -2,10 +2,10 @@
 
 import { compare, getRounds, hash } from "bcryptjs";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 import { writeAuditLog } from "@/lib/audit";
 import { sendAuthEmail } from "@/lib/auth-email";
 import { createAuthToken, findValidAuthToken } from "@/lib/auth-tokens";
+import { emailSchema, loginSchema, phoneCodeSchema, phoneSchema, registerSchema, resetPasswordSchema } from "@/lib/auth-validation";
 import { authorizeAction, authorizePublicAction } from "@/lib/authorization";
 import { createSession, destinationForUser, destroySession, normalizeRole, userPhoneIsVerified } from "@/lib/auth";
 import { authPath, pathWithParams, sanitizeReturnTo } from "@/lib/auth-intent";
@@ -16,48 +16,9 @@ import { beginPhoneVerification, completePhoneVerification } from "@/lib/phone-v
 import { applyAccountPhoneChange } from "@/lib/phone-state";
 import { RateLimitError } from "@/lib/rate-limit";
 import { roleRequiresPhoneVerification, type User } from "@/lib/types";
-import { emailAddress, optionalTextField, parseFormOrRedirect, strongPassword, textField } from "@/lib/validation";
+import { parseFormOrRedirect } from "@/lib/validation";
 
 const INVALID_PASSWORD_HASH = "$2b$12$fhC/QXVkKWPYGt2UA9.R3e4WGHEySkl.1vXaYPfRVKCWKc4mXljpC";
-
-const normalizedPhone = z.string().trim().min(7).max(30)
-  .refine((value) => Boolean(normalizePhoneNumber(value)), "Enter a valid international phone number.")
-  .transform((value) => normalizePhoneNumber(value)!);
-const optionalNormalizedPhone = z.preprocess(
-  (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
-  normalizedPhone.optional(),
-);
-
-const loginSchema = z.object({ email: emailAddress, password: z.string().min(1).max(128) });
-const registerSchema = z.object({
-  name: textField(2, 100),
-  email: emailAddress,
-  password: strongPassword,
-  confirm_password: z.string().min(1).max(128),
-  role: z.enum(["CUSTOMER", "VENDOR_OWNER"]),
-  phone: optionalNormalizedPhone,
-  address: optionalTextField(250),
-}).superRefine((input, context) => {
-  if (input.password !== input.confirm_password) {
-    context.addIssue({ code: "custom", path: ["confirm_password"], message: "The passwords do not match." });
-  }
-  if (input.role === "VENDOR_OWNER" && !input.phone) {
-    context.addIssue({ code: "custom", path: ["phone"], message: "Enter a phone number in international format, such as +2348012345678." });
-  }
-});
-const emailSchema = z.object({ email: emailAddress });
-const resetPasswordSchema = z.object({
-  token: z.string().min(40).max(100),
-  password: strongPassword,
-  confirm_password: z.string().min(1).max(128),
-}).refine((input) => input.password === input.confirm_password, {
-  path: ["confirm_password"],
-  message: "The passwords do not match.",
-});
-const phoneSchema = z.object({
-  phone: normalizedPhone,
-});
-const phoneCodeSchema = z.object({ code: z.string().trim().regex(/^\d{4,10}$/, "Enter the verification code.") });
 
 function fail(path: string, message: string): never {
   redirect(pathWithParams(path, { error: message }));

@@ -1,0 +1,45 @@
+# LaundryLink automated testing
+
+## Test layers
+
+- `npm run test:unit` runs Vitest unit and SQLite integration tests.
+- `npm run test:e2e` runs the critical Chromium journeys with Playwright.
+- `npm run check` runs generated route types, TypeScript, ESLint, unit/integration tests, the production dependency audit, and a production build.
+- `npm run check:all` adds the browser suite to the full local check.
+
+The browser harness always starts LaundryLink on `http://127.0.0.1:3100` with a newly seeded `data/e2e.sqlite` database and dedicated demo password. It does not read the production database, invoke production OAuth, or target a deployed URL. Do not change the E2E server to use production credentials or production data.
+
+## Coverage map
+
+Vitest covers authentication and onboarding validation, role authorization, return URL safety, phone verification, vendor eligibility, cart quantity and price rules, checkout validation, order lifecycle policy, account/order ownership, document permissions, session expiry, database constraints, audit records, and preservation of existing orders during suspension.
+
+Playwright covers customer login/logout and cookie security, session expiration, unauthorized admin access, cleaner discovery, service selection, checkout intent restoration, order creation, vendor processing, customer tracking, admin vendor approval, and anonymous denial for restricted vendor documents.
+
+Google and Apple are deliberately not contacted by CI. Local validation and provider-independent auth behavior are tested, but passing tests do not prove that live OAuth client IDs, secrets, redirect URIs, consent-screen settings, or provider availability are correct.
+
+## Dependency audit note
+
+`npm audit --omit=dev --audit-level=moderate` reports zero production vulnerabilities. The full development audit currently reports the `GHSA-vfj7-8cjw-p6xm` advisory in `braces` through `eslint-config-next -> @next/eslint-plugin-next -> fast-glob -> micromatch`. The registry has no patched `braces` release above 3.0.3, and npm's proposed remediation downgrades `eslint-config-next` from 16.x to 14.2.35, which would break alignment with Next.js 16. The affected chain is used for local/CI lint glob processing and is not included in the production runtime. Recheck this advisory during dependency updates and remove this note once the upstream chain publishes a compatible fix.
+
+## Local commands
+
+Install Chromium once:
+
+```powershell
+npx playwright install chromium
+```
+
+Run one layer:
+
+```powershell
+npm run test:unit
+npm run test:e2e
+```
+
+Open an interactive browser while debugging:
+
+```powershell
+npm run test:e2e:headed
+```
+
+Playwright traces, screenshots, and video are retained only for failures and ignored by Git.
