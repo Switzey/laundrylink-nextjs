@@ -3,7 +3,7 @@ import { collectRuntimeErrors, isDesktop } from "./helpers";
 
 const publicPages = [
   ["home", "/", /Laundry pickup and delivery/i],
-  ["cleaner search", "/cleaners", /Find your cleaner/i],
+  ["cleaner search", "/cleaners", /Find laundry near you/i],
   ["login", "/login", /Welcome back/i],
   ["registration", "/register", /Create your account/i],
   ["password recovery", "/forgot-password", /Reset your password/i],
@@ -59,6 +59,10 @@ test.describe("live public experience", () => {
   test("cleaner discovery preserves cart intent through authentication", async ({ page }) => {
     await page.goto("/cleaners");
     const firstCleaner = page.getByRole("link", { name: "View cleaner" }).first();
+    if (await firstCleaner.count() === 0) {
+      await expect(page.getByRole("heading", { name: "No cleaners match this search" })).toBeVisible();
+      test.skip(true, "No verified, published, bookable production cleaner is available for this read-only journey.");
+    }
     await expect(firstCleaner).toBeVisible();
     await Promise.all([
       page.waitForURL(/\/cleaners\/\d+$/),
@@ -110,8 +114,13 @@ test.describe("live authentication and API security", () => {
     await page.waitForURL(/accounts\.google\.com/);
   });
 
-  test("Apple sign-in reaches Apple's authorization service", async ({ page }) => {
+  test("Apple sign-in reaches Apple when configured or is clearly unavailable", async ({ page }) => {
     await page.goto("/login");
+    const unavailable = page.getByText("Apple sign-in unavailable", { exact: true });
+    if (await unavailable.count()) {
+      await expect(unavailable).toHaveAttribute("aria-disabled", "true");
+      return;
+    }
     await page.getByRole("link", { name: /Continue with Apple/i }).click();
     await expect(page).toHaveURL(/^https:\/\/appleid\.apple\.com\//, { timeout: 15_000 });
   });

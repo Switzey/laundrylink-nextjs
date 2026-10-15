@@ -9,6 +9,7 @@ import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
 import { destinationForUser, getCurrentUser } from "@/lib/auth";
 import { authPath, sanitizeReturnTo } from "@/lib/auth-intent";
+import { oauthProviderConfigured } from "@/lib/env";
 
 export const metadata: Metadata = { title: "Create account" };
 
@@ -21,7 +22,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   return (
     <AuthShell title="Create your account" description="One LaundryLink account for bookings, teams, and deliveries.">
       <AuthMessage error={error} />
-      <OAuthButtons returnTo={returnTo} />
+      <OAuthButtons returnTo={returnTo} googleAvailable={oauthProviderConfigured("google")} appleAvailable={oauthProviderConfigured("apple")} />
       <div className="auth-divider">or use email</div>
       <form action={registerAction} className="grid gap-4">
         {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}

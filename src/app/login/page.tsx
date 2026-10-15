@@ -10,6 +10,7 @@ import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
 import { destinationForUser, getCurrentUser } from "@/lib/auth";
 import { authPath, sanitizeReturnTo } from "@/lib/auth-intent";
+import { oauthProviderConfigured } from "@/lib/env";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -21,7 +22,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <AuthShell title="Welcome back" description="Sign in to continue">
       <AuthMessage error={error} success={success} />
-      <OAuthButtons returnTo={returnTo} />
+      <OAuthButtons returnTo={returnTo} googleAvailable={oauthProviderConfigured("google")} appleAvailable={oauthProviderConfigured("apple")} />
       <div className="auth-divider">or</div>
       <form action={loginAction} className="grid gap-4">
         {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
