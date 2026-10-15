@@ -22,7 +22,7 @@
     "prestart": "node scripts/setup-database.mjs",
     "start": "next start",
     "lint": "eslint src scripts tests types next.config.ts eslint.config.mjs",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "production:check": "node scripts/check-production-readiness.mjs",
     "security:audit": "npm audit --omit=dev --audit-level=moderate",
