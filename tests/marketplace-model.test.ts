@@ -59,6 +59,16 @@ function vendor(overrides: Partial<MarketplaceVendor> = {}): Omit<MarketplaceVen
     has_express: 1,
     categories: "washing,dry cleaning,bedding",
     completed_orders: 20,
+    minimum_order_amount: 0,
+    delivery_pricing_type: "fixed",
+    base_delivery_fee: 1500,
+    delivery_fee_per_km: 0,
+    free_delivery_threshold: null,
+    daily_order_capacity: 20,
+    express_daily_capacity: 5,
+    minimum_lead_hours: 2,
+    express_turnaround_hours: 12,
+    booking_hold_minutes: 30,
     ...overrides,
   };
 }

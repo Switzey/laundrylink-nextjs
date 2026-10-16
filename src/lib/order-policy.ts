@@ -3,7 +3,7 @@ import { DELIVERY_FEE, PLATFORM_FEE, STATUS_FLOW } from "@/lib/constants";
 export function parseServiceQuantity(value: FormDataEntryValue | number | null | undefined) {
   if (value instanceof File) return null;
   const quantity = Number(value ?? 0);
-  return Number.isInteger(quantity) && quantity >= 0 && quantity <= 100 ? quantity : null;
+  return Number.isFinite(quantity) && quantity >= 0 && quantity <= 10000 && Math.round(quantity * 1000) === quantity * 1000 ? quantity : null;
 }
 
 export function calculateOrderTotals(

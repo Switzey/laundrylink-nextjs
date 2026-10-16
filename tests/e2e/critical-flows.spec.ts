@@ -3,7 +3,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { expect, test, type Page } from "@playwright/test";
 
-const databasePath = path.resolve("data/e2e.sqlite");
+const databasePath = path.resolve(process.env.E2E_DATABASE_PATH ?? "data/e2e.sqlite");
 const password = "e2e-test-password";
 
 function withDatabase<T>(callback: (database: DatabaseSync) => T) {
@@ -170,6 +170,39 @@ test("customer account login uses an HTTP-only session and logout revokes it", a
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.waitForURL("/");
   expect((await context.cookies()).some((cookie) => cookie.name === "laundrylink_session")).toBe(false);
+});
+
+test("customer completes the multi-step booking with server-validated pricing and schedule", async ({ page }) => {
+  const ids = records();
+  await login(page, "customer@example.com", /\/customer\/dashboard/);
+  await page.goto(`/orders/new?cleaner=${ids.cleaner.id}`);
+
+  await page.getByRole("button", { name: "Increase Shirt Laundry quantity" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Pickup and delivery address" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Pickup and return schedule" })).toBeVisible();
+  await page.locator('input[name="pickup_date"]').fill(futureDate(3));
+  const pickupWindow = page.locator('select[name="pickup_time_window"]');
+  await expect(pickupWindow).toBeEnabled();
+  await pickupWindow.selectOption({ index: 1 });
+  await page.locator('select[name="delivery_time_window"]').selectOption({ index: 1 });
+
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("heading", { name: "Payment" })).toBeVisible();
+  await page.getByLabel(/Any increase requires my explicit approval/i).check();
+  await page.getByRole("button", { name: "Confirm booking" }).click();
+  await expect(page).toHaveURL(/\/orders\/\d+\?success=/, { timeout: 60_000 });
+  await expect(page.getByText(/^LL-\d{8}-[A-F0-9]{8}$/)).toBeVisible();
+
+  const booking = withDatabase((database) => database.prepare(`SELECT o.order_number, o.confirmed_at, o.payment_method,
+    (SELECT COUNT(1) FROM payments p WHERE p.order_id = o.id AND p.provider = 'pay_on_pickup') AS payment_count
+    FROM orders o ORDER BY o.id DESC LIMIT 1`).get()) as { order_number: string; confirmed_at: string; payment_method: string; payment_count: number };
+  expect(booking.order_number).toMatch(/^LL-\d{8}-[A-F0-9]{8}$/);
+  expect(booking.confirmed_at).toBeTruthy();
+  expect(booking.payment_method).toBe("pay_on_pickup");
+  expect(Number(booking.payment_count)).toBe(1);
 });
 
 test("expired sessions return to login with a safe expiration message", async ({ page, context }) => {

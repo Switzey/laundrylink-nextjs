@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, MapPin, ShoppingBasket } from "lucide-react";
 import { createOrderAction } from "@/app/actions/orders";
 import { OrderIntentForm } from "@/components/order-intent-form";
+import { PricingOrderBuilder } from "@/components/pricing-order-builder";
 import { dashboardForRole, getCurrentUser } from "@/lib/auth";
-import { DELIVERY_FEE, PLATFORM_FEE, TIME_WINDOWS } from "@/lib/constants";
+import { PLATFORM_FEE, TIME_WINDOWS } from "@/lib/constants";
 import { all, one } from "@/lib/db";
-import { money } from "@/lib/format";
 import type { Cleaner, Service } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Book laundry" };
 type Address = { id: number; label: string | null; address: string; city: string; is_default: number };
 type ReorderItem = { service_id: number; quantity: number };
+type Discount = { service_id: number; minimum_quantity: number; discount_type: "fixed" | "percentage"; discount_value: number };
+type DeliveryZone = { id: number; name: string; pricing_type: "fixed" | "distance" | "free"; base_fee: number; per_km_fee: number; minimum_fee: number; maximum_fee: number | null };
 type CustomerPreferences = { fragrance_preference: string | null; detergent_sensitivity: string | null; ironing_instructions: string | null; folding_style: string | null; special_garment_care: string | null };
 
 export default async function NewOrderPage({ searchParams }: { searchParams: Promise<{ cleaner?: string; error?: string; resume?: string; reorder?: string }> }) {
@@ -29,6 +29,11 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
     WHERE c.id = ? AND ve.bookable = 1`, cleanerId) : null;
   const services = selectedCleaner ? await all<Service>(`SELECT * FROM services
     WHERE cleaner_id = ? AND is_active = 1 AND price > 0 AND price <= 10000000 ORDER BY name`, selectedCleaner.id) : [];
+  const discounts = selectedCleaner ? await all<Discount>(`SELECT d.service_id, d.minimum_quantity, d.discount_type, d.discount_value
+    FROM service_bulk_discounts d JOIN services s ON s.id = d.service_id
+    WHERE s.cleaner_id = ? AND d.is_active = 1 ORDER BY d.minimum_quantity`, selectedCleaner.id) : [];
+  const zones = selectedCleaner ? await all<DeliveryZone>("SELECT id, name, pricing_type, base_fee, per_km_fee, minimum_fee, maximum_fee FROM delivery_zones WHERE cleaner_id = ? AND is_active = 1 ORDER BY name", selectedCleaner.id) : [];
+  const servicesWithDiscounts = services.map((service) => ({ ...service, discounts: discounts.filter((discount) => discount.service_id === service.id) }));
   const addresses = user ? await all<Address>("SELECT * FROM addresses WHERE user_id = ? ORDER BY is_default DESC, label", user.id) : [];
   const preferences = user ? await one<CustomerPreferences>("SELECT * FROM customer_preferences WHERE user_id = ?", user.id) : null;
   const parsedReorderId = Number(reorderParam ?? 0);
@@ -46,7 +51,7 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
     reorderOrder.id,
     selectedCleaner?.id ?? 0,
   ) : [];
-  const reorderQuantities = new Map(reorderItems.map((item) => [Number(item.service_id), Number(item.quantity)]));
+  const reorderQuantities = Object.fromEntries(reorderItems.map((item) => [Number(item.service_id), Number(item.quantity)]));
   const savedCareNotes = preferences ? [
     preferences.fragrance_preference && `Fragrance: ${preferences.fragrance_preference}`,
     preferences.detergent_sensitivity && `Detergent sensitivity: ${preferences.detergent_sensitivity}`,
@@ -72,10 +77,23 @@ export default async function NewOrderPage({ searchParams }: { searchParams: Pro
         resumeDraft={resume === "1"}
       >
         <input type="hidden" name="cleaner_id" value={selectedCleaner.id} />
-        <div className="grid gap-6"><section className="surface panel"><div className="flex items-center gap-2"><ShoppingBasket className="text-brand-blue" size={21} /><h2 className="section-title">Services from {selectedCleaner.business_name}</h2></div><div className="mt-5 grid gap-3">{services.map((service) => <label className="surface-muted grid grid-cols-[1fr_5.5rem] items-center gap-4 p-4" key={service.id}><span><strong className="block text-brand-navy">{service.name}</strong><span className="mt-1 block text-sm text-zinc-600">{service.description}</span><span className="mt-2 block text-sm font-bold text-brand-blue">{money(service.price)} / {service.unit.replaceAll("_", " ")}</span></span><span><span className="field-label">Quantity</span><input className="field" type="number" min="0" max="100" defaultValue={reorderQuantities.get(service.id) ?? 0} name={`service_${service.id}`} /></span></label>)}</div></section>
-          <section className="surface panel"><div className="flex items-center gap-2"><CalendarDays className="text-brand-teal" size={21} /><h2 className="section-title">Schedule</h2></div><div className="form-grid two mt-5"><label><span className="field-label">Pickup date</span><input className="field" type="date" min={today} name="pickup_date" required /></label><label><span className="field-label">Pickup window</span><select className="field" name="pickup_time_window" required><option value="">Choose window</option>{TIME_WINDOWS.map((window) => <option key={window}>{window}</option>)}</select></label><label><span className="field-label">Delivery date</span><input className="field" type="date" min={today} name="delivery_date" /></label><label><span className="field-label">Delivery window</span><select className="field" name="delivery_time_window"><option value="">Choose window</option>{TIME_WINDOWS.map((window) => <option key={window}>{window}</option>)}</select></label></div></section>
-          <section className="surface panel"><div className="flex items-center gap-2"><MapPin className="text-brand-blue" size={21} /><h2 className="section-title">Addresses and notes</h2></div><div className="form-grid two mt-5"><label><span className="field-label">Saved pickup address</span><select className="field" name="pickup_address_id" defaultValue={addresses.find((a) => a.is_default)?.id ?? ""}><option value="">Enter manually</option>{addresses.map((address) => <option value={address.id} key={address.id}>{address.label || address.address} - {address.city}</option>)}</select></label><label><span className="field-label">Saved delivery address</span><select className="field" name="delivery_address_id" defaultValue={addresses.find((a) => a.is_default)?.id ?? ""}><option value="">Enter manually</option>{addresses.map((address) => <option value={address.id} key={address.id}>{address.label || address.address} - {address.city}</option>)}</select></label><label><span className="field-label">Manual pickup address</span><input className="field" name="pickup_address" /></label><label><span className="field-label">Manual delivery address</span><input className="field" name="delivery_address" /></label><label><span className="field-label">Pickup notes</span><textarea className="field min-h-24" name="pickup_notes" /></label><label><span className="field-label">Delivery notes</span><textarea className="field min-h-24" name="delivery_notes" /></label><label className="sm:col-span-2"><span className="field-label">Care notes</span><textarea className="field min-h-24" name="notes" defaultValue={reorderOrder?.notes ?? savedCareNotes} placeholder="Stains, delicate items, or special handling" /></label></div>{!addresses.length && <p className="mt-4 text-sm text-zinc-500">Save addresses for faster booking from <Link className="font-bold text-brand-blue" href="/customer/addresses">your address book</Link>.</p>}</section></div>
-        <aside className="surface panel h-fit lg:sticky lg:top-24"><h2 className="section-title">Order summary</h2><div className="mt-5 grid gap-3 text-sm"><div className="flex justify-between"><span className="text-zinc-500">Cleaner</span><strong>{selectedCleaner.business_name}</strong></div><div className="flex justify-between"><span className="text-zinc-500">Delivery fee</span><strong>{money(DELIVERY_FEE)}</strong></div><div className="flex justify-between"><span className="text-zinc-500">Platform fee</span><strong>{money(PLATFORM_FEE)}</strong></div><p className="border-t border-zinc-200 pt-4 text-xs leading-5 text-zinc-500">Service totals are calculated from the quantities you select and confirmed when you create the order.</p></div><button className="btn-primary mt-5 w-full" type="submit">{user ? "Create order" : "Continue to sign in"}</button></aside>
+        <PricingOrderBuilder
+          cleanerId={selectedCleaner.id}
+          cleanerName={selectedCleaner.business_name}
+          services={servicesWithDiscounts}
+          zones={zones}
+          addresses={addresses}
+          initialQuantities={reorderQuantities}
+          initialNotes={reorderOrder?.notes ?? savedCareNotes}
+          minimumOrderAmount={Number(selectedCleaner.minimum_order_amount ?? 0)}
+          defaultDelivery={{ pricingType: selectedCleaner.delivery_pricing_type ?? "fixed", baseFee: Number(selectedCleaner.base_delivery_fee ?? 1500), perKmFee: Number(selectedCleaner.delivery_fee_per_km ?? 0) }}
+          freeDeliveryThreshold={selectedCleaner.free_delivery_threshold == null ? null : Number(selectedCleaner.free_delivery_threshold)}
+          platformFee={PLATFORM_FEE}
+          expressTurnaroundHours={Number(selectedCleaner.express_turnaround_hours)}
+          today={today}
+          timeWindows={TIME_WINDOWS}
+          authenticated={Boolean(user)}
+        />
       </OrderIntentForm> : <div className="surface empty">Choose a cleaner above to view services and continue.</div>}
     </div>
   );

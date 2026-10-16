@@ -44,7 +44,21 @@ export const createOrderSchema = z.object({
   pickup_notes: optionalTextField(1000),
   delivery_notes: optionalTextField(1000),
   notes: optionalTextField(1000),
-}).superRefine(validateDeliverySchedule);
+  voucher_code: z.preprocess(
+    (value) => typeof value === "string" && value.trim() ? value.trim().toUpperCase() : undefined,
+    z.string().regex(/^[A-Z0-9_-]{3,32}$/).optional(),
+  ),
+  payment_method: z.literal("pay_on_pickup"),
+  price_policy_ack: z.literal("on"),
+}).superRefine((input, context) => {
+  validateDeliverySchedule(input, context);
+  if (!input.delivery_date) {
+    context.addIssue({ code: "custom", path: ["delivery_date"], message: "Choose a delivery date." });
+  }
+  if (!input.delivery_time_window) {
+    context.addIssue({ code: "custom", path: ["delivery_time_window"], message: "Choose a delivery window." });
+  }
+});
 
 export const orderStatusSchema = z.object({
   order_id: positiveId,

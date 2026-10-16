@@ -55,7 +55,7 @@ const serviceSchema = z.object({
   category: textField(2, 80),
   description: optionalTextField(500),
   price: boundedMoney,
-  unit: z.enum(["per_item", "per_kg", "per_pair", "per_set", "flat_rate"]),
+  unit: z.enum(["per_item", "per_kg", "per_bag", "per_pair", "per_set", "flat_rate"]),
   turnaround_time: textField(2, 100),
   express_available: z.string().optional().transform((value) => value === "on"),
   is_active: z.string().optional().transform((value) => value === "on"),

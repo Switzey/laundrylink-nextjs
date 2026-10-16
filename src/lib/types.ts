@@ -70,6 +70,16 @@ export interface Cleaner {
   reviews_count?: number;
   logo_file_id?: number | null;
   cover_file_id?: number | null;
+  minimum_order_amount?: number;
+  delivery_pricing_type?: "fixed" | "distance" | "free";
+  base_delivery_fee?: number;
+  delivery_fee_per_km?: number;
+  free_delivery_threshold?: number | null;
+  daily_order_capacity: number;
+  express_daily_capacity: number;
+  minimum_lead_hours: number;
+  express_turnaround_hours: number;
+  booking_hold_minutes: number;
 }
 
 export interface Service {
@@ -83,6 +93,15 @@ export interface Service {
   category: string;
   turnaround_time: string | null;
   express_available: number;
+  express_fee_type: "fixed" | "percentage";
+  express_fee_value: number;
+  special_treatment_available: number;
+  special_treatment_fee: number;
+  minimum_quantity: number;
+  quantity_step: number;
+  package_details: string | null;
+  requires_final_confirmation: number;
+  price_version: number;
 }
 
 export interface VendorVerification {
@@ -116,6 +135,8 @@ export interface OrderSummary {
   subtotal: number;
   total: number;
   payment_status: string;
+  order_number?: string | null;
+  is_express?: number;
   pickup_date: string | null;
   pickup_time_window: string | null;
   delivery_date: string | null;
@@ -124,4 +145,3 @@ export interface OrderSummary {
   business_name: string;
   customer_name?: string | null;
 }
-

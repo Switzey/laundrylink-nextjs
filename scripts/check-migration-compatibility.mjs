@@ -9,6 +9,8 @@ import { applyOnboardingSchemaToSqlite } from "./onboarding-schema.mjs";
 import { applySecuritySchemaToSqlite } from "./security-schema.mjs";
 import { applyMarketplaceSchemaToSqlite } from "./marketplace-schema.mjs";
 import { applyCustomerAccountSchemaToSqlite } from "./customer-account-schema.mjs";
+import { applyPricingSchemaToSqlite } from "./pricing-schema.mjs";
+import { applyBookingSchemaToSqlite } from "./booking-schema.mjs";
 
 const url = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
@@ -39,6 +41,8 @@ function applyMigrations() {
   applySecuritySchemaToSqlite(database);
   applyMarketplaceSchemaToSqlite(database);
   applyCustomerAccountSchemaToSqlite(database);
+  applyPricingSchemaToSqlite(database);
+  applyBookingSchemaToSqlite(database);
 }
 
 try {
@@ -74,6 +78,22 @@ try {
   requiredColumn("cleaners", "business_phone_verified_e164");
   requiredColumn("cleaners", "is_published");
   requiredColumn("cleaners", "is_suspended");
+  requiredColumn("orders", "order_number");
+  requiredColumn("orders", "voucher_discount_amount");
+  requiredColumn("cleaners", "daily_order_capacity");
+  requiredObject("table", "vouchers");
+  requiredObject("table", "voucher_redemptions");
+  requiredObject("table", "order_attachments");
+  requiredObject("table", "order_price_adjustments");
+  requiredColumn("cleaners", "minimum_order_amount");
+  requiredColumn("services", "price_version");
+  requiredColumn("order_items", "service_name");
+  requiredColumn("order_items", "pricing_snapshot");
+  requiredColumn("orders", "pricing_status");
+  requiredColumn("orders", "pending_pricing_snapshot");
+  requiredObject("table", "service_bulk_discounts");
+  requiredObject("table", "delivery_zones");
+  requiredObject("table", "service_price_history");
 
   const foreignKeyFailures = database.prepare("PRAGMA foreign_key_check").all();
   if (foreignKeyFailures.length) throw new Error("The migrated schema failed its foreign-key check.");

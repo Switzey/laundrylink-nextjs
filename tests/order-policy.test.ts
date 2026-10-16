@@ -14,12 +14,13 @@ describe("cart and checkout", () => {
   test.each([
     ["0", 0],
     ["3", 3],
+    ["2.5", 2.5],
     [100, 100],
   ])("accepts cart quantity %s", (input, expected) => {
     expect(parseServiceQuantity(input)).toBe(expected);
   });
 
-  test.each(["-1", "1.5", "101", "abc"])("rejects cart quantity %s", (input) => {
+  test.each(["-1", "10001", "abc"])("rejects cart quantity %s", (input) => {
     expect(parseServiceQuantity(input)).toBeNull();
   });
 
@@ -39,6 +40,8 @@ describe("cart and checkout", () => {
       pickup_time_window: "8am - 10am",
       pickup_address_id: 1,
       delivery_address_id: 1,
+      payment_method: "pay_on_pickup",
+      price_policy_ack: "on",
     };
     expect(createOrderSchema.safeParse({ ...base, delivery_date: "2026-10-19" }).success).toBe(false);
     expect(createOrderSchema.safeParse({ ...base, delivery_time_window: "10am - 12pm" }).success).toBe(false);

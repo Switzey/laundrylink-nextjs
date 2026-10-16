@@ -8,6 +8,8 @@ import { applyOnboardingSchemaToLibsql } from "./onboarding-schema.mjs";
 import { applySecuritySchemaToLibsql } from "./security-schema.mjs";
 import { applyMarketplaceSchemaToLibsql } from "./marketplace-schema.mjs";
 import { applyCustomerAccountSchemaToLibsql } from "./customer-account-schema.mjs";
+import { applyPricingSchemaToLibsql } from "./pricing-schema.mjs";
+import { applyBookingSchemaToLibsql } from "./booking-schema.mjs";
 
 const url = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
@@ -57,6 +59,8 @@ await applyOnboardingSchemaToLibsql(destination);
 await applySecuritySchemaToLibsql(destination);
 await applyMarketplaceSchemaToLibsql(destination);
 await applyCustomerAccountSchemaToLibsql(destination);
+await applyPricingSchemaToLibsql(destination);
+await applyBookingSchemaToLibsql(destination);
 
 const existingUsers = await destination.execute("SELECT COUNT(1) AS count FROM users");
 if (Number(existingUsers.rows[0]?.count ?? 0) > 0) {
@@ -88,6 +92,13 @@ const tableOrder = [
   "favorite_cleaners",
   "customer_preferences",
   "support_tickets",
+  "service_bulk_discounts",
+  "delivery_zones",
+  "service_price_history",
+  "vouchers",
+  "voucher_redemptions",
+  "order_attachments",
+  "order_price_adjustments",
 ];
 
 for (const table of tableOrder) {

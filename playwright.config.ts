@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const port = 3100;
+const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
 const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
@@ -17,10 +17,10 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
-  webServer: {
+  webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER ? undefined : {
     command: "node scripts/start-e2e-server.mjs",
     url: baseURL,
-    timeout: 120_000,
+    timeout: 180_000,
     reuseExistingServer: false,
   },
   projects: [

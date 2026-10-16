@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, type ReactNode } from "react";
 
 const DRAFT_PREFIX = "laundrylink:order-draft:";
-const allowedDraftField = /^(service_\d+|pickup_date|pickup_time_window|delivery_date|delivery_time_window|pickup_address_id|delivery_address_id|pickup_address|delivery_address|pickup_notes|delivery_notes|notes)$/;
+const allowedDraftField = /^(service_\d+|express_\d+|treatment_\d+|delivery_zone_id|voucher_code|payment_method|price_policy_ack|pickup_date|pickup_time_window|delivery_date|delivery_time_window|pickup_address_id|delivery_address_id|pickup_address|delivery_address|pickup_notes|delivery_notes|notes)$/;
 
 type Draft = Record<string, string>;
 
@@ -22,13 +22,17 @@ function readDraft(key: string): Draft | null {
 }
 
 function restoreDraft(form: HTMLFormElement, draft: Draft) {
+  let restoredControl: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null = null;
   for (const [name, value] of Object.entries(draft)) {
     if ((name === "pickup_address_id" || name === "delivery_address_id") && !value) continue;
     const control = form.elements.namedItem(name);
     if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement) {
-      control.value = value;
+      if (control instanceof HTMLInputElement && control.type === "checkbox") control.checked = true;
+      else control.value = value;
+      restoredControl ??= control;
     }
   }
+  restoredControl?.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function saveDraft(form: HTMLFormElement, key: string) {
@@ -74,7 +78,7 @@ export function OrderIntentForm({
     <form
       ref={formRef}
       action={action}
-      className="grid gap-6 lg:grid-cols-[1.3fr_.7fr]"
+      className="block"
       onSubmit={(event) => {
         saveDraft(event.currentTarget, draftKey);
         if (authenticated) return;

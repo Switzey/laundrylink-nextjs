@@ -7,9 +7,12 @@ import { applyOnboardingSchemaToSqlite } from "./onboarding-schema.mjs";
 import { applySecuritySchemaToSqlite } from "./security-schema.mjs";
 import { applyMarketplaceSchemaToSqlite } from "./marketplace-schema.mjs";
 import { applyCustomerAccountSchemaToSqlite } from "./customer-account-schema.mjs";
+import { applyPricingSchemaToSqlite } from "./pricing-schema.mjs";
+import { applyBookingSchemaToSqlite } from "./booking-schema.mjs";
 
 if (process.env.TURSO_DATABASE_URL && !process.env.DATABASE_PATH) {
-  console.log("Hosted database configured; local SQLite setup skipped.");
+  console.log("Hosted database configured; applying Turso migrations.");
+  await import("./setup-turso.mjs");
   process.exit(0);
 }
 
@@ -196,6 +199,8 @@ applyOnboardingSchemaToSqlite(db);
 applySecuritySchemaToSqlite(db);
 applyMarketplaceSchemaToSqlite(db);
 applyCustomerAccountSchemaToSqlite(db);
+applyPricingSchemaToSqlite(db);
+applyBookingSchemaToSqlite(db);
 
 const existingUsers = db.prepare("SELECT COUNT(1) AS count FROM users").get().count;
 if (existingUsers > 0) {

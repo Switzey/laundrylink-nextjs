@@ -64,7 +64,7 @@ export const securitySchemaStatements = [
          WHERE s.cleaner_id = c.id AND s.is_active = 1 AND s.price > 0 AND s.price <= 10000000
            AND length(trim(s.name)) BETWEEN 2 AND 120
            AND length(trim(s.category)) BETWEEN 2 AND 80
-           AND s.unit IN ('per_item', 'per_kg', 'per_pair', 'per_set', 'flat_rate')) AS active_service_count,
+           AND s.unit IN ('per_item', 'per_kg', 'per_bag', 'per_pair', 'per_set', 'flat_rate')) AS active_service_count,
         c.is_published,
         c.is_available AS is_accepting_orders,
         c.is_suspended
@@ -148,14 +148,14 @@ export const securitySchemaStatements = [
   `CREATE TRIGGER IF NOT EXISTS validate_services_insert BEFORE INSERT ON services BEGIN
     SELECT CASE WHEN length(trim(NEW.name)) NOT BETWEEN 2 AND 120 THEN RAISE(ABORT, 'invalid service name') END;
     SELECT CASE WHEN NEW.price <= 0 OR NEW.price > 10000000 THEN RAISE(ABORT, 'invalid service price') END;
-    SELECT CASE WHEN NEW.unit NOT IN ('per_item', 'per_kg', 'per_pair', 'per_set', 'flat_rate') THEN RAISE(ABORT, 'invalid service unit') END;
+    SELECT CASE WHEN NEW.unit NOT IN ('per_item', 'per_kg', 'per_bag', 'per_pair', 'per_set', 'flat_rate') THEN RAISE(ABORT, 'invalid service unit') END;
     SELECT CASE WHEN length(trim(NEW.category)) NOT BETWEEN 2 AND 80 THEN RAISE(ABORT, 'invalid service category') END;
     SELECT CASE WHEN NEW.is_active NOT IN (0, 1) OR NEW.express_available NOT IN (0, 1) THEN RAISE(ABORT, 'invalid service state') END;
   END`,
   `CREATE TRIGGER IF NOT EXISTS validate_services_update BEFORE UPDATE ON services BEGIN
     SELECT CASE WHEN length(trim(NEW.name)) NOT BETWEEN 2 AND 120 THEN RAISE(ABORT, 'invalid service name') END;
     SELECT CASE WHEN NEW.price <= 0 OR NEW.price > 10000000 THEN RAISE(ABORT, 'invalid service price') END;
-    SELECT CASE WHEN NEW.unit NOT IN ('per_item', 'per_kg', 'per_pair', 'per_set', 'flat_rate') THEN RAISE(ABORT, 'invalid service unit') END;
+    SELECT CASE WHEN NEW.unit NOT IN ('per_item', 'per_kg', 'per_bag', 'per_pair', 'per_set', 'flat_rate') THEN RAISE(ABORT, 'invalid service unit') END;
     SELECT CASE WHEN length(trim(NEW.category)) NOT BETWEEN 2 AND 80 THEN RAISE(ABORT, 'invalid service category') END;
     SELECT CASE WHEN NEW.is_active NOT IN (0, 1) OR NEW.express_available NOT IN (0, 1) THEN RAISE(ABORT, 'invalid service state') END;
   END`,
@@ -180,10 +180,10 @@ export const securitySchemaStatements = [
     SELECT CASE WHEN NEW.subtotal < 0 OR NEW.delivery_fee < 0 OR NEW.platform_fee < 0 OR NEW.total < 0 THEN RAISE(ABORT, 'invalid order amount') END;
   END`,
   `CREATE TRIGGER IF NOT EXISTS validate_order_items_insert BEFORE INSERT ON order_items BEGIN
-    SELECT CASE WHEN NEW.quantity NOT BETWEEN 1 AND 100 OR NEW.price <= 0 THEN RAISE(ABORT, 'invalid order item') END;
+    SELECT CASE WHEN NEW.quantity <= 0 OR NEW.quantity > 10000 OR NEW.price <= 0 THEN RAISE(ABORT, 'invalid order item') END;
   END`,
   `CREATE TRIGGER IF NOT EXISTS validate_order_items_update BEFORE UPDATE ON order_items BEGIN
-    SELECT CASE WHEN NEW.quantity NOT BETWEEN 1 AND 100 OR NEW.price <= 0 THEN RAISE(ABORT, 'invalid order item') END;
+    SELECT CASE WHEN NEW.quantity <= 0 OR NEW.quantity > 10000 OR NEW.price <= 0 THEN RAISE(ABORT, 'invalid order item') END;
   END`,
   `CREATE TRIGGER IF NOT EXISTS validate_reviews_insert BEFORE INSERT ON reviews BEGIN
     SELECT CASE WHEN NEW.rating NOT BETWEEN 1 AND 5 THEN RAISE(ABORT, 'invalid review rating') END;
@@ -221,6 +221,7 @@ export function applySecuritySchemaToSqlite(database) {
   database.exec("PRAGMA foreign_keys = ON");
   database.exec("DROP VIEW IF EXISTS vendor_eligibility");
   for (const trigger of securityTriggerNames) database.exec(`DROP TRIGGER IF EXISTS ${trigger}`);
+  database.exec("UPDATE services SET unit = 'flat_rate' WHERE unit = 'flat'");
   for (const statement of securitySchemaStatements) database.exec(statement);
 }
 
@@ -228,5 +229,6 @@ export async function applySecuritySchemaToLibsql(client) {
   await client.execute("PRAGMA foreign_keys = ON");
   await client.execute("DROP VIEW IF EXISTS vendor_eligibility");
   for (const trigger of securityTriggerNames) await client.execute(`DROP TRIGGER IF EXISTS ${trigger}`);
+  await client.execute("UPDATE services SET unit = 'flat_rate' WHERE unit = 'flat'");
   for (const statement of securitySchemaStatements) await client.execute(statement);
 }
