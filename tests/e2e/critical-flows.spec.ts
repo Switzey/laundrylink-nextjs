@@ -292,22 +292,32 @@ test("early access safely records a customer lead", async ({ page }) => {
 
 test("service quantities and checkout fields preserve their browser cart values", async ({ page }) => {
   await page.goto("/orders/new?cleaner=1");
-  const shirt = page.locator("label").filter({ hasText: "Shirt Laundry" });
-  await shirt.locator('input[type="number"]').fill("2");
+  const shirt = page.locator('input[aria-label="Shirt Laundry quantity"]');
+  await shirt.fill("2");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel("Manual pickup address").fill("18 Test Avenue, Lagos");
+  await page.getByLabel("Manual delivery address").fill("21 Test Avenue, Lagos");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Pickup date").fill(futureDate(2));
+  await expect(page.getByLabel("Pickup window")).toBeEnabled();
   await page.getByLabel("Pickup window").selectOption({ label: "8am - 10am" });
-  await expect(shirt.locator('input[type="number"]')).toHaveValue("2");
-  await expect(page.getByRole("button", { name: "Continue to sign in" })).toBeEnabled();
+  await expect(shirt).toHaveValue("2");
 });
 
 test("authentication redirect restores the cleaner, cart, schedule, and addresses", async ({ page }) => {
   await page.goto("/orders/new?cleaner=1");
-  const shirtQuantity = page.locator("label").filter({ hasText: "Shirt Laundry" }).locator('input[type="number"]');
+  const shirtQuantity = page.locator('input[aria-label="Shirt Laundry quantity"]');
   await shirtQuantity.fill("3");
-  await page.getByLabel("Pickup date").fill(futureDate(2));
-  await page.getByLabel("Pickup window").selectOption({ label: "10am - 12pm" });
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Manual pickup address").fill("18 Test Avenue, Lagos");
   await page.getByLabel("Manual delivery address").fill("21 Test Avenue, Lagos");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel("Pickup date").fill(futureDate(2));
+  await expect(page.getByLabel("Pickup window")).toBeEnabled();
+  await page.getByLabel("Pickup window").selectOption({ label: "10am - 12pm" });
+  await page.getByLabel("Delivery window").selectOption({ label: "10am - 12pm" });
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel(/I understand that estimated quantities/).check();
   await page.getByRole("button", { name: "Continue to sign in" }).click();
   await page.waitForURL(/\/login\?returnTo=/);
 
@@ -323,12 +333,17 @@ test("authentication redirect restores the cleaner, cart, schedule, and addresse
 test("customer submits an order with server-calculated prices", async ({ page }) => {
   await login(page, "customer@example.com", /\/customer\/dashboard/);
   await page.goto("/orders/new?cleaner=1");
-  await page.locator("label").filter({ hasText: "Shirt Laundry" }).locator('input[type="number"]').fill("2");
+  await page.locator('input[aria-label="Shirt Laundry quantity"]').fill("2");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Pickup date").fill(futureDate(2));
+  await expect(page.getByLabel("Pickup window")).toBeEnabled();
   await page.getByLabel("Pickup window").selectOption({ label: "8am - 10am" });
-  await page.getByRole("button", { name: "Create order" }).click();
+  await page.getByLabel("Delivery window").selectOption({ label: "10am - 12pm" });
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByLabel(/I understand that estimated quantities/).check();
+  await page.getByRole("button", { name: "Confirm booking" }).click();
   await page.waitForURL(/\/orders\/\d+\?success=/);
-  await expect(page.getByText("Order created successfully")).toBeVisible();
 
   const orderId = Number(page.url().match(/\/orders\/(\d+)/)?.[1]);
   const order = withDatabase((database) => database.prepare("SELECT subtotal, delivery_fee, platform_fee, total FROM orders WHERE id = ?").get(orderId)) as {
