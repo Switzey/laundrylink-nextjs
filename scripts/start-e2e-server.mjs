@@ -5,7 +5,7 @@ import { spawn, spawnSync } from "node:child_process";
 const host = "127.0.0.1";
 const port = process.env.PLAYWRIGHT_PORT || "3100";
 const origin = `http://${host}:${port}`;
-const databasePath = process.env.PLAYWRIGHT_DATABASE_PATH || path.join(process.cwd(), "data", `e2e-${port}.sqlite`);
+const databasePath = process.env.PLAYWRIGHT_DATABASE_PATH || path.join(process.cwd(), "data", "e2e.sqlite");
 
 if (!origin.startsWith("http://127.0.0.1:")) {
   throw new Error("E2E tests may only start against the local loopback interface.");
