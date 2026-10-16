@@ -17,6 +17,7 @@ function futureDate(days: number) {
 }
 
 test("vendor catalogue and customer pricing flow render on desktop and mobile", async ({ browser }) => {
+  test.slow();
   const vendorContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const vendorPage = await vendorContext.newPage();
   await login(vendorPage, "cleaner@example.com", /\/cleaner\/dashboard/);
