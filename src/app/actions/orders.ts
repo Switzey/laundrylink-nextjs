@@ -230,7 +230,7 @@ export async function createOrderAction(formData: FormData) {
         pricing_status, pricing_confirmed_at, estimated_total, delivery_pricing_snapshot, pickup_notes, delivery_notes, notes,
         order_number, booking_expires_at, confirmed_at, payment_method, is_express, voucher_discount_amount, voucher_code,
         quoted_total, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       user.id,
       input.cleaner_id,
       pickupAddress.label,

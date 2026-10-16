@@ -47,7 +47,7 @@ async function execute(sql: string, values: InValue[]): Promise<ResultSet> {
 
 export async function all<T>(sql: string, ...values: InValue[]): Promise<T[]> {
   const result = await execute(sql, values);
-  return result.rows as unknown as T[];
+  return result.rows.map((row) => ({ ...row }) as T);
 }
 
 export async function one<T>(sql: string, ...values: InValue[]): Promise<T | null> {
