@@ -11,6 +11,7 @@ import { applyMarketplaceSchemaToSqlite } from "./marketplace-schema.mjs";
 import { applyCustomerAccountSchemaToSqlite } from "./customer-account-schema.mjs";
 import { applyPricingSchemaToSqlite } from "./pricing-schema.mjs";
 import { applyBookingSchemaToSqlite } from "./booking-schema.mjs";
+import { applyVendorOperationsSchemaToSqlite } from "./vendor-operations-schema.mjs";
 
 const url = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
@@ -43,6 +44,7 @@ function applyMigrations() {
   applyCustomerAccountSchemaToSqlite(database);
   applyPricingSchemaToSqlite(database);
   applyBookingSchemaToSqlite(database);
+  applyVendorOperationsSchemaToSqlite(database);
 }
 
 try {
@@ -94,6 +96,19 @@ try {
   requiredObject("table", "service_bulk_discounts");
   requiredObject("table", "delivery_zones");
   requiredObject("table", "service_price_history");
+  requiredColumn("cleaners", "daily_weight_capacity");
+  requiredColumn("cleaners", "auto_accept_orders");
+  requiredColumn("orders", "production_stage");
+  requiredObject("table", "vendor_branches");
+  requiredObject("table", "branch_services");
+  requiredObject("table", "vendor_staff_profiles");
+  requiredObject("table", "staff_shifts");
+  requiredObject("table", "vendor_closures");
+  requiredObject("table", "order_stage_events");
+  requiredObject("table", "garment_records");
+  requiredObject("table", "equipment_maintenance");
+  requiredObject("table", "order_resolution_requests");
+  requiredObject("table", "review_responses");
 
   const foreignKeyFailures = database.prepare("PRAGMA foreign_key_check").all();
   if (foreignKeyFailures.length) throw new Error("The migrated schema failed its foreign-key check.");

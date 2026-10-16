@@ -79,10 +79,10 @@ export async function createOrderAction(formData: FormData) {
   const input = parseFormOrRedirect(createOrderSchema, formData, returnTo, "Enter valid order details.");
   const eligibility = await getVendorEligibility(input.cleaner_id);
   const cleaner = eligibility?.bookable
-    ? await one<{ id: number; user_id: number | null; business_name: string; minimum_order_amount: number; delivery_pricing_type: "fixed" | "distance" | "free"; base_delivery_fee: number; delivery_fee_per_km: number; free_delivery_threshold: number | null; latitude: number | null; longitude: number | null; daily_order_capacity: number; express_daily_capacity: number; minimum_lead_hours: number; express_turnaround_hours: number; booking_hold_minutes: number }>(
+    ? await one<{ id: number; user_id: number | null; business_name: string; minimum_order_amount: number; delivery_pricing_type: "fixed" | "distance" | "free"; base_delivery_fee: number; delivery_fee_per_km: number; free_delivery_threshold: number | null; latitude: number | null; longitude: number | null; daily_order_capacity: number; daily_weight_capacity: number; express_daily_capacity: number; minimum_lead_hours: number; express_turnaround_hours: number; booking_hold_minutes: number; auto_accept_orders: number }>(
       `SELECT id, user_id, business_name, minimum_order_amount, delivery_pricing_type, base_delivery_fee,
         delivery_fee_per_km, free_delivery_threshold, latitude, longitude, daily_order_capacity,
-        express_daily_capacity, minimum_lead_hours, express_turnaround_hours, booking_hold_minutes
+        daily_weight_capacity, express_daily_capacity, minimum_lead_hours, express_turnaround_hours, booking_hold_minutes, auto_accept_orders
        FROM cleaners WHERE id = ?`,
       input.cleaner_id,
     )
@@ -168,6 +168,16 @@ export async function createOrderAction(formData: FormData) {
       return { error: "Special treatment is no longer available for one or more selected items." } as const;
     }
     const isExpress = currentSelected.some((item) => item.express);
+    const closure = await one<{ id: number }>(
+      "SELECT id FROM vendor_closures WHERE cleaner_id=? AND branch_id IS NULL AND starts_at < ? AND ends_at > ? LIMIT 1",
+      input.cleaner_id, `${input.pickup_date} 23:59:59`, `${input.pickup_date} 00:00:00`,
+    );
+    if (closure) return { error: "This cleaner is closed on the selected pickup date." } as const;
+    const requestedWeight = currentSelected.filter((item) => item.service.unit === "per_kg").reduce((sum, item) => sum + item.quantity, 0);
+    if (requestedWeight > 0) {
+      const bookedWeight = await one<{ total: number }>(`SELECT COALESCE(SUM(oi.quantity),0) total FROM order_items oi JOIN orders o ON o.id=oi.order_id WHERE o.cleaner_id=? AND o.pickup_date=? AND oi.unit='per_kg' AND o.status NOT IN ('cancelled','rejected')`, input.cleaner_id, input.pickup_date);
+      if (Number(bookedWeight?.total ?? 0) + requestedWeight > Number(cleaner.daily_weight_capacity)) return { error: "That date has reached its laundry weight capacity." } as const;
+    }
     const availableWindows = await slotAvailability(cleaner, input.pickup_date, isExpress);
     if (!availableWindows.some((slot) => slot.window === input.pickup_time_window && slot.available)) {
       return { error: "That pickup window has just filled up. Choose another available slot." } as const;
@@ -317,6 +327,11 @@ export async function createOrderAction(formData: FormData) {
         attachment.contents,
         now(),
       );
+    }
+    if (cleaner.auto_accept_orders) {
+      const timestamp = now();
+      await run("UPDATE orders SET status='accepted', accepted_at=?, updated_at=? WHERE id=? AND status='pending'", timestamp, timestamp, id);
+      await activity(id, cleaner.user_id, "order_auto_accepted", "Order automatically accepted under the vendor's capacity rules.");
     }
     await run(
       `INSERT INTO payments (order_id, customer_id, amount, provider, reference, status, metadata, created_at, updated_at)

@@ -7,14 +7,14 @@ import { MarketplaceMap } from "@/components/marketplace-map";
 import { VendorImage } from "@/components/vendor-image";
 import { getCurrentUser } from "@/lib/auth";
 import { authPath } from "@/lib/auth-intent";
-import { all, one } from "@/lib/db";
+import { all, one, run } from "@/lib/db";
 import { humanize, money } from "@/lib/format";
 import { getMarketplaceVendorByIds } from "@/lib/marketplace";
 import type { Service } from "@/lib/types";
 import { getVendorEligibility } from "@/lib/vendor-eligibility";
 import { publicAvailabilityMessage, showPublicBookingAction } from "@/lib/vendor-eligibility-model";
 
-type Review = { id: number; rating: number; comment: string | null; customer_name: string | null; created_at: string };
+type Review = { id: number; rating: number; comment: string | null; customer_name: string | null; created_at: string; vendor_response: string | null };
 
 async function publicVendor(id: number) {
   return (await getMarketplaceVendorByIds([id]))[0] ?? null;
@@ -41,10 +41,11 @@ export default async function CleanerDetailPage({ params }: { params: Promise<{ 
   if (!Number.isInteger(id) || id <= 0) notFound();
   const cleaner = await publicVendor(id);
   if (!cleaner) notFound();
+  await run("UPDATE cleaners SET profile_view_count = profile_view_count + 1 WHERE id = ?", id);
 
   const [services, reviews, eligibility, user] = await Promise.all([
     all<Service>("SELECT * FROM services WHERE cleaner_id = ? AND is_active = 1 AND price > 0 AND price <= 10000000 ORDER BY category, price, name", id),
-    all<Review>(`SELECT r.*, u.name AS customer_name FROM reviews r LEFT JOIN users u ON u.id = r.customer_id WHERE r.cleaner_id = ? ORDER BY r.created_at DESC`, id),
+    all<Review>(`SELECT r.*, u.name AS customer_name, rr.response AS vendor_response FROM reviews r LEFT JOIN users u ON u.id = r.customer_id LEFT JOIN review_responses rr ON rr.review_id = r.id WHERE r.cleaner_id = ? ORDER BY r.created_at DESC`, id),
     getVendorEligibility(id),
     getCurrentUser(),
   ]);
@@ -87,7 +88,7 @@ export default async function CleanerDetailPage({ params }: { params: Promise<{ 
 
           <section id="photos"><p className="eyebrow">Business gallery</p><h2 className="section-title mt-1">Photos</h2><div className="mt-4 grid gap-4 sm:grid-cols-2">{cleaner.cover_file_id && <figure className="surface overflow-hidden"><div className="relative aspect-[16/10]"><VendorImage alt={`${cleaner.business_name} business location`} businessName={cleaner.business_name} className="object-cover" fileId={cleaner.cover_file_id} kind="cover" /></div><figcaption className="p-3 text-sm font-semibold text-zinc-600">Business cover</figcaption></figure>}{cleaner.logo_file_id && <figure className="surface overflow-hidden"><div className="relative aspect-[16/10] bg-blue-50"><VendorImage alt={`${cleaner.business_name} brand logo`} businessName={cleaner.business_name} className="object-contain p-7" fileId={cleaner.logo_file_id} kind="logo" /></div><figcaption className="p-3 text-sm font-semibold text-zinc-600">Business logo</figcaption></figure>}</div></section>
 
-          <section id="reviews"><div className="flex items-end justify-between gap-4"><div><p className="eyebrow">Customer feedback</p><h2 className="section-title mt-1">Verified order reviews</h2></div><strong className="text-brand-navy">{Number(cleaner.rating).toFixed(1)} / 5</strong></div><div className="mt-4 grid gap-3 sm:grid-cols-2">{reviews.length ? reviews.slice(0, 8).map((review) => <article className="surface p-4" key={review.id}><div className="flex items-center justify-between"><strong className="text-sm text-brand-navy">{review.customer_name || "Customer"}</strong><span className="text-sm font-bold text-amber-800">{review.rating}/5</span></div><p className="mt-2 text-sm leading-6 text-zinc-600">{review.comment || "A positive LaundryLink experience."}</p></article>) : <div className="surface p-5 text-sm text-zinc-500">No reviews yet.</div>}</div></section>
+          <section id="reviews"><div className="flex items-end justify-between gap-4"><div><p className="eyebrow">Customer feedback</p><h2 className="section-title mt-1">Verified order reviews</h2></div><strong className="text-brand-navy">{Number(cleaner.rating).toFixed(1)} / 5</strong></div><div className="mt-4 grid gap-3 sm:grid-cols-2">{reviews.length ? reviews.slice(0, 8).map((review) => <article className="surface p-4" key={review.id}><div className="flex items-center justify-between"><strong className="text-sm text-brand-navy">{review.customer_name || "Customer"}</strong><span className="text-sm font-bold text-amber-800">{review.rating}/5</span></div><p className="mt-2 text-sm leading-6 text-zinc-600">{review.comment || "A positive LaundryLink experience."}</p>{review.vendor_response&&<div className="mt-3 border-l-2 border-brand-teal pl-3"><p className="text-xs font-bold text-brand-navy">Response from {cleaner.business_name}</p><p className="mt-1 text-sm text-zinc-600">{review.vendor_response}</p></div>}</article>) : <div className="surface p-5 text-sm text-zinc-500">No reviews yet.</div>}</div></section>
         </div>
 
         <aside className="grid content-start gap-5">

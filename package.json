@@ -16,6 +16,7 @@
     "db:migrate:customer-account": "node scripts/migrate-customer-account.mjs",
     "db:migrate:pricing": "node scripts/migrate-pricing.mjs",
     "db:migrate:booking": "node scripts/migrate-booking.mjs",
+    "db:migrate:vendor-operations": "node scripts/migrate-vendor-operations.mjs",
     "db:audit:phone": "node scripts/audit-phone-verification.mjs",
     "db:check-migrations": "node scripts/check-migration-compatibility.mjs",
     "user:set-password": "node scripts/set-user-password.mjs",

@@ -3,7 +3,7 @@ export const DELIVERY_FEE = 1500;
 export const PLATFORM_FEE = 500;
 
 export const STATUS_FLOW: Record<string, string[]> = {
-  pending: ["accepted", "cancelled"],
+  pending: ["accepted", "rejected", "cancelled"],
   accepted: ["picked_up"],
   picked_up: ["in_cleaning"],
   in_cleaning: ["ready"],

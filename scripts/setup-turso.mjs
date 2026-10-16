@@ -10,6 +10,7 @@ import { applyMarketplaceSchemaToLibsql } from "./marketplace-schema.mjs";
 import { applyCustomerAccountSchemaToLibsql } from "./customer-account-schema.mjs";
 import { applyPricingSchemaToLibsql } from "./pricing-schema.mjs";
 import { applyBookingSchemaToLibsql } from "./booking-schema.mjs";
+import { applyVendorOperationsSchemaToLibsql } from "./vendor-operations-schema.mjs";
 
 const url = process.env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
@@ -61,6 +62,7 @@ await applyMarketplaceSchemaToLibsql(destination);
 await applyCustomerAccountSchemaToLibsql(destination);
 await applyPricingSchemaToLibsql(destination);
 await applyBookingSchemaToLibsql(destination);
+await applyVendorOperationsSchemaToLibsql(destination);
 
 const existingUsers = await destination.execute("SELECT COUNT(1) AS count FROM users");
 if (Number(existingUsers.rows[0]?.count ?? 0) > 0) {
@@ -99,6 +101,17 @@ const tableOrder = [
   "voucher_redemptions",
   "order_attachments",
   "order_price_adjustments",
+  "vendor_branches",
+  "branch_services",
+  "vendor_staff_profiles",
+  "vendor_invites",
+  "staff_shifts",
+  "vendor_closures",
+  "order_stage_events",
+  "garment_records",
+  "equipment_maintenance",
+  "order_resolution_requests",
+  "review_responses",
 ];
 
 for (const table of tableOrder) {

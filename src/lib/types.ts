@@ -80,6 +80,10 @@ export interface Cleaner {
   minimum_lead_hours: number;
   express_turnaround_hours: number;
   booking_hold_minutes: number;
+  auto_accept_orders?: number;
+  daily_weight_capacity?: number;
+  commission_rate?: number;
+  profile_view_count?: number;
 }
 
 export interface Service {

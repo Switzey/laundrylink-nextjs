@@ -137,6 +137,25 @@ function futureDate(days: number) {
 
 test.beforeEach(() => resetState());
 
+test("vendor business workspace is usable on desktop and mobile", async ({ page }) => {
+  await login(page, "cleaner@example.com", /\/cleaner\/dashboard/);
+  for (const [path, heading] of [
+    ["/cleaner/orders", "Orders"],
+    ["/cleaner/operations", "Operations"],
+    ["/cleaner/team", "Team & branches"],
+    ["/cleaner/finance", "Finance"],
+    ["/cleaner/growth", "Growth"],
+  ] as const) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+    await expect(page.locator("body")).not.toContainText("Internal Server Error");
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/cleaner/orders");
+  await expect(page.getByRole("heading", { name: "Orders", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Vendor workspace" })).toBeVisible();
+});
+
 test("customer can register and sign in through the temporary email bypass", async ({ page }) => {
   test.slow();
   const email = `qa-registration-${Date.now()}@example.com`;
