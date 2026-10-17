@@ -75,6 +75,7 @@ export const appConfig = Object.freeze({
     appleClientSecret: process.env.APPLE_CLIENT_SECRET?.trim() || null,
   }),
   phone: Object.freeze({
+    twilioEnabled: process.env.TWILIO_VERIFY_ENABLED?.trim().toLowerCase() === "true",
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID?.trim() || null,
     twilioAuthToken: process.env.TWILIO_AUTH_TOKEN?.trim() || null,
     twilioVerifyServiceSid: process.env.TWILIO_VERIFY_SERVICE_SID?.trim() || null,
@@ -102,6 +103,7 @@ export function oauthProviderConfigured(provider: "google" | "apple") {
 
 export function twilioPhoneVerificationConfigured() {
   return Boolean(
+    appConfig.phone.twilioEnabled &&
     appConfig.phone.twilioAccountSid &&
     appConfig.phone.twilioAuthToken &&
     appConfig.phone.twilioVerifyServiceSid,

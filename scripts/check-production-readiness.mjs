@@ -71,11 +71,15 @@ if (value("AUTH_BYPASS_EMAIL_VERIFICATION").toLowerCase() === "true") {
 }
 configuredGroup("Google sign-in", ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]);
 configuredGroup("Apple sign-in", ["APPLE_CLIENT_ID", "APPLE_CLIENT_SECRET"]);
-configuredGroup("Twilio phone verification", [
-  "TWILIO_ACCOUNT_SID",
-  "TWILIO_AUTH_TOKEN",
-  "TWILIO_VERIFY_SERVICE_SID",
-]);
+if (value("TWILIO_VERIFY_ENABLED").toLowerCase() === "true") {
+  configuredGroup("Twilio phone verification", [
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_VERIFY_SERVICE_SID",
+  ]);
+} else {
+  warn("Twilio phone verification is disabled by TWILIO_VERIFY_ENABLED.");
+}
 
 const databaseUrl = value("TURSO_DATABASE_URL");
 const databaseToken = value("TURSO_AUTH_TOKEN");
