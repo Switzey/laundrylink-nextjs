@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import { emailVerificationBypassIsActive } from "@/lib/email-verification-policy";
+import { developmentPhoneVerificationCode } from "@/lib/phone-verification-policy";
 
 const appEnvironmentSchema = z.enum(["development", "staging", "production"]);
 
@@ -77,6 +78,7 @@ export const appConfig = Object.freeze({
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID?.trim() || null,
     twilioAuthToken: process.env.TWILIO_AUTH_TOKEN?.trim() || null,
     twilioVerifyServiceSid: process.env.TWILIO_VERIFY_SERVICE_SID?.trim() || null,
+    developmentCode: process.env.PHONE_VERIFICATION_TEST_CODE?.trim() || null,
   }),
 });
 
@@ -98,12 +100,24 @@ export function oauthProviderConfigured(provider: "google" | "apple") {
     : Boolean(appConfig.oauth.appleClientId && appConfig.oauth.appleClientSecret);
 }
 
-export function phoneVerificationConfigured() {
+export function twilioPhoneVerificationConfigured() {
   return Boolean(
     appConfig.phone.twilioAccountSid &&
     appConfig.phone.twilioAuthToken &&
     appConfig.phone.twilioVerifyServiceSid,
   );
+}
+
+export function developmentPhoneCode() {
+  return developmentPhoneVerificationCode(
+    appConfig.environment,
+    appConfig.phone.developmentCode,
+    twilioPhoneVerificationConfigured(),
+  );
+}
+
+export function phoneVerificationConfigured() {
+  return twilioPhoneVerificationConfigured() || Boolean(developmentPhoneCode());
 }
 
 export function hostedDatabaseConfig() {

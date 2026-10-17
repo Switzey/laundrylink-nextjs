@@ -1,10 +1,21 @@
 import "server-only";
 
-import { appConfig, phoneVerificationConfigured } from "@/lib/env";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { appConfig, developmentPhoneCode, twilioPhoneVerificationConfigured } from "@/lib/env";
 import { logError, logWarning } from "@/lib/logger";
 
+function developmentSid(phone: string) {
+  return `development-${createHmac("sha256", appConfig.auditSalt).update(phone).digest("hex")}`;
+}
+
+function developmentCodeMatches(code: string, expected: string) {
+  const received = Buffer.from(code);
+  const target = Buffer.from(expected);
+  return received.length === target.length && timingSafeEqual(received, target);
+}
+
 async function twilioRequest(path: string, body: URLSearchParams) {
-  if (!phoneVerificationConfigured()) return null;
+  if (!twilioPhoneVerificationConfigured()) return null;
   const credentials = Buffer.from(
     `${appConfig.phone.twilioAccountSid}:${appConfig.phone.twilioAuthToken}`,
   ).toString("base64");
@@ -28,6 +39,7 @@ async function twilioRequest(path: string, body: URLSearchParams) {
 }
 
 export async function sendPhoneVerification(phone: string) {
+  if (developmentPhoneCode()) return { sid: developmentSid(phone) };
   const response = await twilioRequest("Verifications", new URLSearchParams({ To: phone, Channel: "sms" }));
   if (!response?.ok) {
     logWarning("auth.phone_send_failed", { status: response?.status ?? 0 });
@@ -38,6 +50,10 @@ export async function sendPhoneVerification(phone: string) {
 }
 
 export async function checkPhoneVerification(phone: string, code: string) {
+  const testCode = developmentPhoneCode();
+  if (testCode) {
+    return { approved: developmentCodeMatches(code, testCode), sid: developmentSid(phone) };
+  }
   const response = await twilioRequest(
     "VerificationCheck",
     new URLSearchParams({ To: phone, Code: code }),
