@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ArrowRight, Mail, Phone, UserRound, ShieldCheck } from "lucide-react";
 import { registerAction } from "@/app/actions/auth";
 import { AuthMessage } from "@/components/auth-message";
 import { AuthShell } from "@/components/auth-shell";
@@ -19,23 +20,54 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   const defaultRole = role === "VENDOR_OWNER" ? "VENDOR_OWNER" : "CUSTOMER";
   const currentUser = await getCurrentUser();
   if (currentUser) redirect(destinationForUser(currentUser, returnTo));
+
   return (
-    <AuthShell title="Create your account" description="One LaundryLink account for bookings, teams, and deliveries.">
+    <AuthShell title="Create your account" description="Laundry care that works around your life." variant="register">
       <AuthMessage error={error} />
       <OAuthButtons returnTo={returnTo} googleAvailable={oauthProviderConfigured("google")} appleAvailable={oauthProviderConfigured("apple")} />
-      <div className="auth-divider">or use email</div>
-      <form action={registerAction} className="grid gap-4">
+      <div className="auth-divider">or create an account with email</div>
+
+      <form action={registerAction} className="ll-auth-form">
         {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
-        <label><span className="field-label">Full name</span><input className="field" name="name" autoComplete="name" maxLength={100} required /></label>
-        <label><span className="field-label">Email</span><input className="field" name="email" type="email" autoComplete="email" inputMode="email" required /></label>
-        <label><span className="field-label">Account type</span><select className="field" name="role" defaultValue={defaultRole}><option value="CUSTOMER">Book laundry services</option><option value="VENDOR_OWNER">Run a laundry business</option></select></label>
-        <label><span className="field-label">Phone</span><input className="field" name="phone" type="tel" autoComplete="tel" placeholder="+2348012345678" maxLength={30} /><span className="mt-1.5 block text-xs text-zinc-500">Required for laundry businesses. Use international format.</span></label>
-        <label><span className="field-label">Address</span><input className="field" name="address" autoComplete="street-address" maxLength={250} /></label>
-        <PasswordField name="password" label="Password" autoComplete="new-password" minLength={12} hint="Use at least 12 characters." />
+        <label>
+          <span className="field-label">Full name</span>
+          <span className="relative block">
+            <UserRound aria-hidden="true" className="ll-auth-input-icon" size={19} />
+            <input className="field pl-11" name="name" autoComplete="name" maxLength={100} placeholder="Your full name" required />
+          </span>
+        </label>
+        <label>
+          <span className="field-label">Email address</span>
+          <span className="relative block">
+            <Mail aria-hidden="true" className="ll-auth-input-icon" size={19} />
+            <input className="field pl-11" name="email" type="email" autoComplete="email" inputMode="email" placeholder="you@example.com" required />
+          </span>
+        </label>
+        <label>
+          <span className="field-label">Account type</span>
+          <select className="field" name="role" defaultValue={defaultRole}>
+            <option value="CUSTOMER">I want to book laundry</option>
+            <option value="VENDOR_OWNER">I run a laundry business</option>
+          </select>
+        </label>
+        <label>
+          <span className="field-label">Phone number</span>
+          <span className="relative block">
+            <Phone aria-hidden="true" className="ll-auth-input-icon" size={19} />
+            <input className="field pl-11" name="phone" type="tel" autoComplete="tel" placeholder="+2348012345678" maxLength={30} required={defaultRole === "VENDOR_OWNER"} />
+          </span>
+          <span className="ll-auth-field-help">Required for laundry businesses. Include the country code.</span>
+        </label>
+        <label>
+          <span className="field-label">Address <span className="ll-auth-optional">(optional)</span></span>
+          <input className="field" name="address" autoComplete="street-address" maxLength={250} placeholder="Your pickup address" />
+        </label>
+        <PasswordField name="password" label="Create password" autoComplete="new-password" minLength={12} hint="Use at least 12 characters for better security." />
         <PasswordField name="confirm_password" label="Confirm password" autoComplete="new-password" minLength={12} />
-        <SubmitButton pendingLabel="Creating account...">Create account</SubmitButton>
+        <p className="ll-auth-terms"><ShieldCheck size={15} aria-hidden="true" /> By continuing, you agree to our <Link href="/terms">Terms</Link> and <Link href="/privacy">Privacy Policy</Link>.</p>
+        <SubmitButton pendingLabel="Creating account..." className="btn-primary ll-auth-submit">Create account <ArrowRight size={18} aria-hidden="true" /></SubmitButton>
       </form>
-      <p className="mt-6 text-center text-sm text-zinc-500">Already registered? <Link href={authPath("/login", returnTo)} className="font-bold text-brand-blue hover:underline">Sign in</Link></p>
+      <p className="ll-auth-switch">Already have an account? <Link href={authPath("/login", returnTo)}>Sign in</Link></p>
     </AuthShell>
   );
 }

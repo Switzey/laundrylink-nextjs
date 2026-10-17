@@ -245,7 +245,7 @@ test("customers cannot open admin operations", async ({ page }) => {
   await login(page, "customer@example.com", /\/customer\/dashboard/);
   await page.goto("/admin/dashboard");
   await page.waitForURL(/\/customer\/dashboard/);
-  await expect(page.getByText(/Customer workspace/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Good to see you/i })).toBeVisible();
 });
 
 test("customers can discover a cleaner and inspect active services", async ({ page }) => {

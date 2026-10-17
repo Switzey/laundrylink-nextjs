@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Bell, CalendarClock, CreditCard, PackageCheck, Plus } from "lucide-react";
+import {
+  ArrowRight, Bell, CalendarDays, CheckCircle2, ChevronRight, Clock3, CreditCard,
+  Heart, MapPin, PackageCheck, Search, Shirt, Sparkles, Truck, UserRound,
+  WandSparkles,
+} from "lucide-react";
 import { CustomerAccountNav } from "@/components/customer-account-nav";
 import { requireUser } from "@/lib/auth";
 import { all, one } from "@/lib/db";
@@ -9,6 +13,12 @@ import type { OrderSummary } from "@/lib/types";
 import { StatusBadge } from "@/components/status-badge";
 
 export const metadata: Metadata = { title: "Customer dashboard" };
+
+const services = [
+  { title: "Wash & fold", detail: "Everyday essentials", icon: Shirt, href: "/services/washing", tone: "blue" },
+  { title: "Dry cleaning", detail: "Delicate garment care", icon: Sparkles, href: "/services/dry-cleaning", tone: "mint" },
+  { title: "Ironing", detail: "Ready to wear", icon: WandSparkles, href: "/services/ironing", tone: "sky" },
+] as const;
 
 export default async function CustomerDashboard() {
   const user = await requireUser("CUSTOMER", { returnTo: "/customer/dashboard" });
@@ -21,19 +31,122 @@ export default async function CustomerDashboard() {
       FROM orders WHERE customer_id = ?`, user.id),
     one<{ count: number }>("SELECT COUNT(1) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL", user.id),
   ]);
+
+  const firstName = user.name.split(" ")[0];
+  const stats = [
+    { label: "Active orders", value: Number(metrics?.active ?? 0), icon: PackageCheck, href: "/customer/orders?status=active" },
+    { label: "Upcoming pickups", value: Number(metrics?.upcoming ?? 0), icon: CalendarDays, href: "/customer/orders?status=active" },
+    { label: "Pending payments", value: Number(metrics?.pending_payments ?? 0), icon: CreditCard, href: "/customer/orders" },
+    { label: "Notifications", value: Number(unread?.count ?? 0), icon: Bell, href: "/notifications" },
+  ];
+
   return (
-    <div className="page">
-      <CustomerAccountNav />
-      <div className="page-header"><div><p className="eyebrow">Customer workspace</p><h1 className="page-title">Good to see you, {user.name.split(" ")[0]}</h1><p className="page-copy">Track every order, schedule the next pickup, and keep your delivery details ready.</p></div><Link className="btn-primary" href="/orders/new"><Plus size={18} />New order</Link></div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Link href="/customer/orders?status=active" className="surface stat transition hover:border-blue-300"><p className="flex items-center gap-2 text-sm text-zinc-500"><PackageCheck size={16} />Active orders</p><p className="stat-value">{Number(metrics?.active ?? 0)}</p></Link>
-        <Link href="/customer/orders?status=active" className="surface stat transition hover:border-blue-300"><p className="flex items-center gap-2 text-sm text-zinc-500"><CalendarClock size={16} />Upcoming pickups</p><p className="stat-value">{Number(metrics?.upcoming ?? 0)}</p></Link>
-        <Link href="/customer/orders" className="surface stat transition hover:border-blue-300"><p className="flex items-center gap-2 text-sm text-zinc-500"><CreditCard size={16} />Pending payments</p><p className="stat-value">{Number(metrics?.pending_payments ?? 0)}</p></Link>
-        <Link href="/notifications" className="surface stat transition hover:border-blue-300"><p className="flex items-center gap-2 text-sm text-zinc-500"><Bell size={16} />Unread notifications</p><p className="stat-value">{Number(unread?.count ?? 0)}</p></Link>
+    <div className="ll-customer-page">
+      <div className="ll-customer-wrap">
+        <header className="ll-customer-greeting">
+          <div>
+            <p className="ll-customer-eyebrow"><MapPin size={14} aria-hidden="true" /> Your laundry, your way</p>
+            <h1>Good to see you, {firstName} <span aria-hidden="true">👋</span></h1>
+            <p>Let&apos;s take laundry off your to-do list.</p>
+          </div>
+          <Link href="/notifications" className="ll-customer-notification" aria-label={`Notifications (${Number(unread?.count ?? 0)} unread)`}>
+            <Bell size={21} aria-hidden="true" />
+            {Number(unread?.count ?? 0) > 0 && <span className="ll-notification-indicator" aria-hidden="true" />}
+          </Link>
+        </header>
+
+        <section className="ll-customer-hero" aria-labelledby="customer-hero-heading">
+          <div className="ll-customer-hero-copy">
+            <span className="ll-customer-hero-tag"><Sparkles size={14} aria-hidden="true" /> PICKUP & DELIVERY MADE EASY</span>
+            <h2 id="customer-hero-heading">Leave the laundry <span>to us.</span></h2>
+            <p>Find trusted local cleaners and book a convenient pickup in just a few steps.</p>
+            <Link href="/orders/new" className="ll-customer-hero-button">Book a pickup <ArrowRight size={18} aria-hidden="true" /></Link>
+          </div>
+          <div className="ll-customer-hero-art" aria-hidden="true">
+            <span className="ll-customer-hero-orbit" />
+            <span className="ll-customer-hero-garment"><Shirt size={120} strokeWidth={1.25} /></span>
+            <span className="ll-customer-hero-spark"><Sparkles size={26} /></span>
+            <span className="ll-customer-hero-tick"><CheckCircle2 size={21} /></span>
+          </div>
+        </section>
+
+        <div className="ll-customer-quick-search">
+          <Search size={19} aria-hidden="true" />
+          <span>Looking for a cleaner near you?</span>
+          <Link href="/cleaners">Explore cleaners <ChevronRight size={17} aria-hidden="true" /></Link>
+        </div>
+
+        <section className="ll-customer-section" aria-labelledby="customer-services-heading">
+          <div className="ll-customer-section-heading">
+            <div><span className="ll-customer-kicker">HOW CAN WE HELP?</span><h2 id="customer-services-heading">Choose a service</h2></div>
+            <Link href="/cleaners">See all <ArrowRight size={16} aria-hidden="true" /></Link>
+          </div>
+          <div className="ll-service-grid">
+            {services.map(({ title, detail, icon: Icon, href, tone }) => (
+              <Link href={href} key={title} className={`ll-service-card ll-service-${tone}`}>
+                <span className="ll-service-icon"><Icon size={30} strokeWidth={1.8} aria-hidden="true" /></span>
+                <strong>{title}</strong>
+                <span className="ll-service-description">{detail}</span>
+                <span className="ll-service-arrow"><ArrowRight size={17} aria-hidden="true" /></span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="ll-customer-section" aria-labelledby="customer-activity-heading">
+          <div className="ll-customer-section-heading">
+            <div><span className="ll-customer-kicker">AT A GLANCE</span><h2 id="customer-activity-heading">Your laundry activity</h2></div>
+          </div>
+          <div className="ll-customer-stats">
+            {stats.map(({ label, value, icon: Icon, href }) => (
+              <Link className="ll-customer-stat" href={href} key={label}>
+                <span className="ll-customer-stat-icon"><Icon size={20} aria-hidden="true" /></span>
+                <span className="ll-customer-stat-value">{value}</span>
+                <span className="ll-customer-stat-label">{label}</span>
+                <ArrowRight className="ll-customer-stat-arrow" size={16} aria-hidden="true" />
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="ll-customer-section" aria-labelledby="customer-orders-heading">
+          <div className="ll-customer-section-heading">
+            <div><span className="ll-customer-kicker">YOUR JOURNEY</span><h2 id="customer-orders-heading">Recent orders</h2></div>
+            <Link href="/customer/orders">View all <ArrowRight size={16} aria-hidden="true" /></Link>
+          </div>
+          <div className="ll-customer-order-list">
+            {orders.length ? orders.map((order) => (
+              <Link href={`/orders/${order.id}`} key={order.id} className="ll-customer-order">
+                <span className="ll-customer-order-icon"><Truck size={22} aria-hidden="true" /></span>
+                <span className="ll-customer-order-body">
+                  <strong>{order.business_name}</strong>
+                  <span>Order #{order.id} · {dateLabel(order.pickup_date)} {order.pickup_time_window ? `· ${order.pickup_time_window}` : ""}</span>
+                </span>
+                <span className="ll-customer-order-trailing"><StatusBadge status={order.status} /><strong>{money(order.total)}</strong></span>
+                <ChevronRight className="ll-customer-order-chevron" size={19} aria-hidden="true" />
+              </Link>
+            )) : (
+              <div className="ll-customer-order-empty">
+                <PackageCheck size={32} aria-hidden="true" />
+                <h3>No orders yet</h3>
+                <p>Your first laundry booking is just a few taps away.</p>
+                <Link href="/cleaners">Discover cleaners <ArrowRight size={16} aria-hidden="true" /></Link>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <div className="ll-customer-bottom">
+          <div className="ll-customer-bottom-copy"><Heart size={20} aria-hidden="true" /><span>More living. Less laundry.</span></div>
+          <CustomerAccountNav />
+        </div>
       </div>
-      <section className="mt-8"><div className="flex items-center justify-between"><h2 className="section-title">Recent orders</h2><Link href="/customer/orders" className="text-sm font-bold text-brand-blue">View all orders</Link></div>
-        <div className="surface mt-4 overflow-x-auto">{orders.length ? <table className="data-table"><thead><tr><th>Order</th><th>Cleaner</th><th>Pickup</th><th>Status</th><th>Total</th><th></th></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td className="font-bold text-brand-navy">#{order.id}</td><td>{order.business_name}</td><td>{dateLabel(order.pickup_date)}<span className="block text-xs text-zinc-500">{order.pickup_time_window}</span></td><td><StatusBadge status={order.status} /></td><td>{money(order.total)}</td><td><Link href={`/orders/${order.id}`} className="icon-button" aria-label={`View order ${order.id}`}><ArrowRight size={17} /></Link></td></tr>)}</tbody></table> : <div className="empty"><PackageCheck className="mx-auto mb-3 text-brand-sky" size={34} /><p>No orders yet.</p><Link href="/cleaners" className="btn-primary mt-4">Find a cleaner</Link></div>}</div>
-      </section>
+      <nav className="ll-customer-mobile-nav" aria-label="Customer main navigation">
+        <Link href="/customer/dashboard" aria-current="page"><PackageCheck size={20} aria-hidden="true" />Home</Link>
+        <Link href="/cleaners"><Search size={20} aria-hidden="true" />Explore</Link>
+        <Link href="/customer/orders"><Clock3 size={20} aria-hidden="true" />Orders</Link>
+        <Link href="/profile"><UserRound size={20} aria-hidden="true" />Profile</Link>
+      </nav>
     </div>
   );
 }
