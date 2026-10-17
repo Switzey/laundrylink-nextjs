@@ -10,7 +10,7 @@ export async function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/95 backdrop-blur">
       <div className="shell flex h-18 items-center justify-between gap-5">
-        <BrandLogo compact />
+        <BrandLogo compact href={user ? dashboardForRole(user.role) : "/login"} />
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary navigation">
           <Link className="nav-link" href="/cleaners">Find a cleaner</Link>
           {!user && <Link className="nav-link" href="/how-it-works">How it works</Link>}
