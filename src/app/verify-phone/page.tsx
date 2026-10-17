@@ -7,7 +7,7 @@ import { AuthShell } from "@/components/auth-shell";
 import { SubmitButton } from "@/components/submit-button";
 import { destinationForUser, requireUser, userPhoneIsVerified } from "@/lib/auth";
 import { authPath, sanitizeReturnTo } from "@/lib/auth-intent";
-import { developmentPhoneCode } from "@/lib/env";
+import { developmentPhoneCode, phoneVerificationConfigured } from "@/lib/env";
 import { roleRequiresPhoneVerification } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Verify phone" };
@@ -17,7 +17,9 @@ export default async function VerifyPhonePage({ searchParams }: { searchParams: 
   const returnTo = sanitizeReturnTo(rawReturnTo);
   const user = await requireUser(undefined, { allowUnverified: true, returnTo: returnTo ?? undefined });
   if (!user.email_verified_at) redirect(authPath("/verify-email", returnTo));
-  if (!roleRequiresPhoneVerification(user.role) || userPhoneIsVerified(user)) redirect(destinationForUser(user, returnTo));
+  if (!phoneVerificationConfigured() || !roleRequiresPhoneVerification(user.role) || userPhoneIsVerified(user)) {
+    redirect(destinationForUser(user, returnTo));
+  }
   const localCode = developmentPhoneCode();
   return (
     <AuthShell title="Verify your phone" description="Business and delivery accounts require a verified mobile number.">

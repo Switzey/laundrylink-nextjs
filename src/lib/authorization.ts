@@ -2,12 +2,12 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import { writeAuditLog } from "@/lib/audit";
-import { getCurrentUser, userPhoneIsVerified } from "@/lib/auth";
+import { getCurrentUser, userNeedsPhoneVerification } from "@/lib/auth";
 import { enforceRateLimit, type RateLimitRule } from "@/lib/rate-limit";
 import { assertTrustedMutation, opaqueIdentifier } from "@/lib/request-security";
 import { authPath } from "@/lib/auth-intent";
 import { roleIsAllowed } from "@/lib/access-policy";
-import { roleRequiresPhoneVerification, type Role, type User } from "@/lib/types";
+import { type Role, type User } from "@/lib/types";
 
 const DEFAULT_ACTION_LIMIT = { limit: 60, windowSeconds: 60 } satisfies RateLimitRule;
 
@@ -40,7 +40,7 @@ export async function authorizeAction(options: ProtectedActionOptions) {
   }
 
   if (!options.allowUnverified && !user.email_verified_at) redirect(authPath("/verify-email", options.returnTo));
-  if (!options.allowUnverified && roleRequiresPhoneVerification(user.role) && !userPhoneIsVerified(user)) {
+  if (!options.allowUnverified && userNeedsPhoneVerification(user)) {
     redirect(authPath("/verify-phone", options.returnTo));
   }
 

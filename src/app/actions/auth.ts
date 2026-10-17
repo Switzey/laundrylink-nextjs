@@ -96,9 +96,6 @@ export async function registerAction(formData: FormData) {
   if (!emailDeliveryConfigured() && !bypassEmailVerification) {
     fail(registerPath, "Email registration is temporarily unavailable. Try Google or Apple sign-in.");
   }
-  if (input.role === "VENDOR_OWNER" && !phoneVerificationConfigured()) {
-    fail(registerPath, "Vendor registration is temporarily unavailable while phone verification is offline.");
-  }
   const context = await authorizeAuthenticationAttempt("auth.register", input.email, registerPath, 3, 3600);
   if (await one("SELECT id FROM users WHERE lower(email) = ?", input.email)) {
     await writeAuditLog({ action: "auth.register", outcome: "failed", metadata: { reason: "email_exists" }, context });

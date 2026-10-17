@@ -5,9 +5,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { NextResponse } from "next/server";
 import { all, now, one, run } from "@/lib/db";
-import { appConfig } from "@/lib/env";
+import { appConfig, phoneVerificationConfigured } from "@/lib/env";
 import { authPath, sanitizeReturnTo } from "@/lib/auth-intent";
 import { verifiedPhoneMatches } from "@/lib/phone-numbers";
+import { phoneVerificationGateIsActive } from "@/lib/phone-verification-policy";
 import { ROLES, roleRequiresPhoneVerification, type Role, type User } from "@/lib/types";
 
 function hashToken(token: string) {
@@ -107,7 +108,7 @@ export async function requireUser(
   const allowedRoles = roles ? (Array.isArray(roles) ? roles : [roles]) : null;
   if (allowedRoles && !allowedRoles.includes(user.role)) redirect("/dashboard");
   if (!options.allowUnverified && !user.email_verified_at) redirect(authPath("/verify-email", options.returnTo));
-  if (!options.allowUnverified && roleRequiresPhoneVerification(user.role) && !userPhoneIsVerified(user)) {
+  if (!options.allowUnverified && userNeedsPhoneVerification(user)) {
     redirect(authPath("/verify-phone", options.returnTo));
   }
   return user;
@@ -136,10 +137,18 @@ export function userPhoneIsVerified(user: Pick<User, "phone" | "phone_verified_a
   return verifiedPhoneMatches(user.phone, user.phone_verified_e164, user.phone_verified_at);
 }
 
+export function userNeedsPhoneVerification(user: User) {
+  return phoneVerificationGateIsActive(
+    roleRequiresPhoneVerification(user.role),
+    userPhoneIsVerified(user),
+    phoneVerificationConfigured(),
+  );
+}
+
 export function destinationForUser(user: User, returnTo?: unknown) {
   const intendedPath = sanitizeReturnTo(returnTo);
   if (!user.email_verified_at) return authPath("/verify-email", intendedPath);
-  if (roleRequiresPhoneVerification(user.role) && !userPhoneIsVerified(user)) {
+  if (userNeedsPhoneVerification(user)) {
     return authPath("/verify-phone", intendedPath);
   }
   return intendedPath ?? dashboardForRole(user.role);

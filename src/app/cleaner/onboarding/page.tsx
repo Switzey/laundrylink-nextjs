@@ -18,6 +18,7 @@ import { OnboardingStepper, ONBOARDING_STEPS, type OnboardingStep } from "@/comp
 import { SubmitButton } from "@/components/submit-button";
 import { cleanerIdForUser, requireUser } from "@/lib/auth";
 import { all, one } from "@/lib/db";
+import { phoneVerificationConfigured } from "@/lib/env";
 import { money } from "@/lib/format";
 import { businessPhoneIsVerified } from "@/lib/phone-state";
 import { maskSensitiveValue } from "@/lib/sensitive-data";
@@ -73,6 +74,7 @@ export default async function VendorOnboardingPage({
     all<VendorFileMetadata>("SELECT id, cleaner_id, kind, filename, media_type, size FROM vendor_files WHERE cleaner_id = ?", cleaner.id),
   ]);
   const fileByKind = new Map(files.map((file) => [file.kind, file]));
+  const phoneVerificationAvailable = phoneVerificationConfigured();
   const requestedStep = ONBOARDING_STEPS.some((step) => step.key === query.step) ? query.step as OnboardingStep : null;
   const savedStep = cleaner.onboarding_step === "submitted" ? "review" : cleaner.onboarding_step as OnboardingStep;
   const step = requestedStep ?? savedStep;
@@ -119,10 +121,10 @@ export default async function VendorOnboardingPage({
       </form>
       <section className="surface mx-auto mt-5 max-w-4xl p-5 sm:p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div><h3 className="font-extrabold text-brand-navy">Business phone verification</h3><p className="mt-1 text-sm text-zinc-600">{businessPhoneIsVerified(cleaner) ? `${cleaner.phone} is verified.` : `Save the business details, then verify ${cleaner.phone}. A different number needs its own verification.`}</p></div>
-          {!businessPhoneIsVerified(cleaner) && <form action={sendOnboardingBusinessPhoneVerificationAction}><SubmitButton className="btn-secondary" pendingLabel="Sending code...">Send code</SubmitButton></form>}
+          <div><h3 className="font-extrabold text-brand-navy">Business phone verification</h3><p className="mt-1 text-sm text-zinc-600">{businessPhoneIsVerified(cleaner) ? `${cleaner.phone} is verified.` : phoneVerificationAvailable ? `Save the business details, then verify ${cleaner.phone}. A different number needs its own verification.` : "Phone verification is temporarily unavailable. You can continue setup, but the business will remain unpublished and unable to accept orders until verification is completed."}</p></div>
+          {!businessPhoneIsVerified(cleaner) && phoneVerificationAvailable && <form action={sendOnboardingBusinessPhoneVerificationAction}><SubmitButton className="btn-secondary" pendingLabel="Sending code...">Send code</SubmitButton></form>}
         </div>
-        {!businessPhoneIsVerified(cleaner) && <form action={verifyOnboardingBusinessPhoneAction} className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]"><label><span className="field-label">Verification code</span><input className="field" name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" required /></label><SubmitButton className="btn-primary self-end" pendingLabel="Verifying...">Verify business phone</SubmitButton></form>}
+        {!businessPhoneIsVerified(cleaner) && phoneVerificationAvailable && <form action={verifyOnboardingBusinessPhoneAction} className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]"><label><span className="field-label">Verification code</span><input className="field" name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" required /></label><SubmitButton className="btn-primary self-end" pendingLabel="Verifying...">Verify business phone</SubmitButton></form>}
       </section></>}
 
       {step === "location" && <form action={saveLocationOnboardingAction} className="surface mx-auto max-w-4xl p-5 sm:p-8">

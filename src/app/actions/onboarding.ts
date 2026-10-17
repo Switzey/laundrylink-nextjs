@@ -139,10 +139,15 @@ export async function saveBusinessOnboardingAction(formData: FormData) {
     await writeAuditLog({ actorUserId: user.id, action: "onboarding.business_update", targetType: "cleaner", targetId: cleaner.id, outcome: "succeeded", metadata: { phoneChanged: phoneState.changed, businessPhoneVerified: phoneState.verified }, context });
     return phoneState;
   });
-  if (!businessPhone.verified) {
+  if (!businessPhone.verified && phoneVerificationConfigured()) {
     redirect(stepPath("business", { saved: "1", notice: "Verify the business phone before continuing." }));
   }
-  redirect(stepPath("location", { saved: "1" }));
+  redirect(stepPath("location", {
+    saved: "1",
+    ...(!businessPhone.verified ? {
+      notice: "Phone verification is temporarily unavailable. You can continue setup, but the business cannot be published or accept orders until verification is completed.",
+    } : {}),
+  }));
 }
 
 export async function sendOnboardingBusinessPhoneVerificationAction() {

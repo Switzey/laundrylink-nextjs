@@ -8,7 +8,7 @@ import { writeAuditLog } from "@/lib/audit";
 import { authorizeAction } from "@/lib/authorization";
 import { destroySession } from "@/lib/auth";
 import { now, one, run, transaction } from "@/lib/db";
-import { appConfig } from "@/lib/env";
+import { appConfig, phoneVerificationConfigured } from "@/lib/env";
 import { normalizePhoneNumber } from "@/lib/phone-numbers";
 import { applyAccountPhoneChange } from "@/lib/phone-state";
 import { roleRequiresPhoneVerification } from "@/lib/types";
@@ -305,7 +305,7 @@ export async function updateProfileAction(formData: FormData) {
     });
     return state;
   });
-  if (roleRequiresPhoneVerification(user.role) && !phoneState.verifiedAt) {
+  if (phoneVerificationConfigured() && roleRequiresPhoneVerification(user.role) && !phoneState.verifiedAt) {
     redirect("/verify-phone?notice=Verify+your+new+phone+number+to+continue.");
   }
   redirect("/profile?success=Profile+updated");
