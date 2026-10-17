@@ -99,9 +99,17 @@ async function libsqlColumns(client, table) {
 function finalizeSqlite(database) {
   database.exec(`
     UPDATE cleaners
+    SET is_available = 0
+    WHERE is_available = 1
+      AND (business_phone_verified_at IS NULL
+        OR business_phone_verified_e164 IS NULL
+        OR phone <> business_phone_verified_e164);
+    UPDATE cleaners
     SET verification_status = 'approved', onboarding_step = 'submitted',
         submitted_at = COALESCE(submitted_at, created_at), approved_at = COALESCE(approved_at, created_at)
-    WHERE is_approved = 1;
+    WHERE is_approved = 1
+      AND (verification_status <> 'approved' OR onboarding_step <> 'submitted'
+        OR submitted_at IS NULL OR approved_at IS NULL);
   `);
   for (const trigger of ["validate_cleaners_insert", "validate_cleaners_update", "validate_services_insert", "validate_services_update", "validate_vendor_verifications_insert", "validate_vendor_verifications_update", "validate_vendor_files_insert", "validate_vendor_files_update"]) {
     database.exec(`DROP TRIGGER IF EXISTS ${trigger}`);
@@ -112,9 +120,19 @@ function finalizeSqlite(database) {
 async function finalizeLibsql(client) {
   await client.execute(`
     UPDATE cleaners
+    SET is_available = 0
+    WHERE is_available = 1
+      AND (business_phone_verified_at IS NULL
+        OR business_phone_verified_e164 IS NULL
+        OR phone <> business_phone_verified_e164)
+  `);
+  await client.execute(`
+    UPDATE cleaners
     SET verification_status = 'approved', onboarding_step = 'submitted',
         submitted_at = COALESCE(submitted_at, created_at), approved_at = COALESCE(approved_at, created_at)
     WHERE is_approved = 1
+      AND (verification_status <> 'approved' OR onboarding_step <> 'submitted'
+        OR submitted_at IS NULL OR approved_at IS NULL)
   `);
   for (const trigger of ["validate_cleaners_insert", "validate_cleaners_update", "validate_services_insert", "validate_services_update", "validate_vendor_verifications_insert", "validate_vendor_verifications_update", "validate_vendor_files_insert", "validate_vendor_files_update"]) {
     await client.execute(`DROP TRIGGER IF EXISTS ${trigger}`);
