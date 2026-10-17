@@ -186,8 +186,12 @@ test("customer account login uses an HTTP-only session and logout revokes it", a
   expect(session?.httpOnly).toBe(true);
   expect(session?.sameSite).toBe("Lax");
 
+  await page.goto("/cleaners");
+  await page.getByRole("link", { name: "LaundryLink home" }).first().click();
+  await expect(page).toHaveURL(/\/customer\/dashboard/);
+
   await page.getByRole("button", { name: "Sign out" }).click();
-  await page.waitForURL("/");
+  await page.waitForURL("/login");
   expect((await context.cookies()).some((cookie) => cookie.name === "laundrylink_session")).toBe(false);
 });
 
