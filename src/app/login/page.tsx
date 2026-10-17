@@ -36,11 +36,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           </span>
         </label>
         <div>
-          <div className="ll-auth-label-row">
-            <span className="field-label mb-0">Password</span>
+          <PasswordField name="password" label="Password" autoComplete="current-password" />
+          <div className="ll-auth-label-row mt-2 justify-end">
             <Link className="ll-auth-text-link" href={authPath("/forgot-password", returnTo)}>Forgot password?</Link>
           </div>
-          <PasswordField name="password" autoComplete="current-password" hideLabel />
         </div>
         <SubmitButton pendingLabel="Signing in..." className="btn-primary ll-auth-submit">
           Sign in <ArrowRight size={18} aria-hidden="true" />
